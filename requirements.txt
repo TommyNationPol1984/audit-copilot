@@ -1,0 +1,15 @@
+fastapi>=0.115.0
+uvicorn[standard]>=0.30.0
+python-multipart>=0.0.9
+redis>=5.0.0
+rq>=1.16.0
+google-generativeai>=0.8.0
+pymupdf>=1.24.0
+Pillow>=10.4.0
+python-magic>=0.4.27
+backoff>=2.2.1
+python-dotenv>=1.0.1
+prometheus-client>=0.21.0
+imagehash>=4.3.1
+pytesseract>=0.3.10  # For font size detection from images
+structlog>=24.4.0

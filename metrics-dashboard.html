@@ -1,0 +1,258 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Audit Copilot • Quantitative Metrics Dashboard</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+    <style>
+        .metric-card {
+            transition: transform 0.2s cubic-bezier(0.23, 1, 0.32, 1);
+        }
+        .metric-card:hover {
+            transform: translateY(-2px);
+        }
+        .score-bar {
+            transition: width 0.6s cubic-bezier(0.23, 1.0, 0.32, 1);
+        }
+    </style>
+</head>
+<body class="bg-zinc-950 text-zinc-200">
+    <div class="max-w-7xl mx-auto p-8">
+        <!-- Header -->
+        <div class="flex items-center justify-between mb-8">
+            <div>
+                <h1 class="text-3xl font-semibold tracking-tight">Quantitative Metrics Dashboard</h1>
+                <p class="text-zinc-400 mt-1">Real-time design quality analysis with WCAG AAA + Font Size Detection</p>
+            </div>
+            <div class="flex items-center gap-x-3">
+                <div class="px-4 py-2 bg-zinc-900 rounded-2xl text-sm flex items-center gap-x-2 border border-zinc-800">
+                    <i class="fa-solid fa-chart-line text-emerald-400"></i>
+                    <span>Live Analysis</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Overall Score -->
+        <div class="bg-zinc-900 border border-zinc-800 rounded-3xl p-8 mb-8">
+            <div class="flex items-end justify-between">
+                <div>
+                    <div class="text-sm uppercase tracking-[2px] text-zinc-500">Overall Design Score</div>
+                    <div id="overall-score" class="text-7xl font-semibold tabular-nums mt-2">8.4</div>
+                    <div class="text-emerald-400 text-sm mt-1">Excellent • Top 15% of analyzed decks</div>
+                </div>
+                <div class="text-right">
+                    <div class="text-xs text-zinc-500">Based on 4 metrics</div>
+                    <div class="flex gap-x-4 mt-3">
+                        <div class="text-center">
+                            <div class="text-2xl font-semibold text-emerald-400">9.2</div>
+                            <div class="text-[10px] text-zinc-500">Contrast</div>
+                        </div>
+                        <div class="text-center">
+                            <div class="text-2xl font-semibold text-emerald-400">8.7</div>
+                            <div class="text-[10px] text-zinc-500">Margins</div>
+                        </div>
+                        <div class="text-center">
+                            <div class="text-2xl font-semibold text-amber-400">7.1</div>
+                            <div class="text-[10px] text-zinc-500">Alignment</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Metrics Grid -->
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+            
+            <!-- Contrast -->
+            <div class="metric-card bg-zinc-900 border border-zinc-800 rounded-3xl p-6">
+                <div class="flex items-center justify-between mb-4">
+                    <div class="flex items-center gap-x-3">
+                        <i class="fa-solid fa-adjust text-2xl text-emerald-400"></i>
+                        <div>
+                            <div class="font-medium">Contrast Ratio</div>
+                            <div class="text-xs text-zinc-500">WCAG AAA</div>
+                        </div>
+                    </div>
+                    <div id="contrast-score" class="text-4xl font-semibold tabular-nums">8.7</div>
+                </div>
+                
+                <div class="space-y-3 text-sm">
+                    <div class="flex justify-between">
+                        <span class="text-zinc-400">Ratio</span>
+                        <span id="contrast-ratio" class="font-mono font-medium">12.4:1</span>
+                    </div>
+                    <div class="flex justify-between">
+                        <span class="text-zinc-400">Level</span>
+                        <span id="contrast-level" class="px-3 py-0.5 text-xs rounded-full bg-emerald-950 text-emerald-400 font-medium">AAA</span>
+                    </div>
+                    <div class="flex justify-between">
+                        <span class="text-zinc-400">Font Size</span>
+                        <span id="font-size" class="font-medium">24.5pt <span class="text-emerald-400">(Large)</span></span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Margins -->
+            <div class="metric-card bg-zinc-900 border border-zinc-800 rounded-3xl p-6">
+                <div class="flex items-center justify-between mb-4">
+                    <div class="flex items-center gap-x-3">
+                        <i class="fa-solid fa-arrows-alt-h text-2xl text-sky-400"></i>
+                        <div>
+                            <div class="font-medium">Margins</div>
+                            <div class="text-xs text-zinc-500">Whitespace</div>
+                        </div>
+                    </div>
+                    <div id="margin-score" class="text-4xl font-semibold tabular-nums">8.9</div>
+                </div>
+                <div class="space-y-2 text-sm">
+                    <div class="flex justify-between"><span class="text-zinc-400">Left / Right</span> <span id="margin-h" class="font-mono">11.2% / 12.8%</span></div>
+                    <div class="flex justify-between"><span class="text-zinc-400">Avg Horizontal</span> <span id="margin-avg" class="font-medium">12.0%</span></div>
+                </div>
+            </div>
+
+            <!-- Alignment -->
+            <div class="metric-card bg-zinc-900 border border-zinc-800 rounded-3xl p-6">
+                <div class="flex items-center justify-between mb-4">
+                    <div class="flex items-center gap-x-3">
+                        <i class="fa-solid fa-align-left text-2xl text-violet-400"></i>
+                        <div>
+                            <div class="font-medium">Alignment</div>
+                            <div class="text-xs text-zinc-500">Precision</div>
+                        </div>
+                    </div>
+                    <div id="alignment-score" class="text-4xl font-semibold tabular-nums">7.4</div>
+                </div>
+                <div>
+                    <div class="flex justify-between text-sm mb-1">
+                        <span class="text-zinc-400">Quality</span>
+                        <span id="alignment-quality" class="font-medium text-amber-400">Good</span>
+                    </div>
+                    <div class="h-2 bg-zinc-800 rounded-full overflow-hidden">
+                        <div id="alignment-bar" class="h-2 bg-amber-400 w-[74%]" style="width: 74%"></div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Whitespace -->
+            <div class="metric-card bg-zinc-900 border border-zinc-800 rounded-3xl p-6">
+                <div class="flex items-center justify-between mb-4">
+                    <div class="flex items-center gap-x-3">
+                        <i class="fa-solid fa-expand text-2xl text-teal-400"></i>
+                        <div>
+                            <div class="font-medium">Whitespace</div>
+                            <div class="text-xs text-zinc-500">Breathing Room</div>
+                        </div>
+                    </div>
+                    <div id="whitespace-score" class="text-4xl font-semibold tabular-nums">8.1</div>
+                </div>
+                <div class="flex justify-between text-sm">
+                    <span class="text-zinc-400">Percentage</span>
+                    <span id="whitespace-pct" class="font-mono font-medium">54.3%</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Per-Slide Breakdown -->
+        <div class="bg-zinc-900 border border-zinc-800 rounded-3xl p-6">
+            <div class="flex items-center justify-between mb-4">
+                <div class="font-medium">Per-Slide Quantitative Breakdown</div>
+                <button onclick="simulateNewAnalysis()" 
+                        class="text-xs px-4 py-2 rounded-2xl border border-zinc-700 hover:bg-zinc-800 flex items-center gap-x-2">
+                    <i class="fa-solid fa-sync"></i>
+                    <span>Re-analyze Deck</span>
+                </button>
+            </div>
+            
+            <div id="per-slide-metrics" class="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-3 text-sm">
+                <!-- Populated by JS -->
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Sample data - In real use this comes from the backend via API
+        const sampleMetrics = {
+            overall: 8.4,
+            contrast: { ratio: 12.4, level: "AAA", score: 9.2, fontSize: "24.5pt (Large)" },
+            margins: { left: 11.2, right: 12.8, avg: 12.0, score: 8.9 },
+            alignment: { score: 7.4, quality: "Good" },
+            whitespace: { percentage: 54.3, score: 8.1 },
+            slides: [
+                { slide: 1, score: 9.1, contrast: "AAA", font: "28pt" },
+                { slide: 2, score: 8.7, contrast: "AAA", font: "22pt" },
+                { slide: 3, score: 7.8, contrast: "AA", font: "16pt" },
+                { slide: 4, score: 8.9, contrast: "AAA", font: "24pt" },
+                { slide: 5, score: 6.4, contrast: "AA", font: "14pt" },
+            ]
+        }
+
+        function renderDashboard(data) {
+            // Overall Score
+            document.getElementById('overall-score').textContent = data.overall;
+
+            // Contrast
+            document.getElementById('contrast-score').textContent = data.contrast.score;
+            document.getElementById('contrast-ratio').textContent = data.contrast.ratio + ":1";
+            document.getElementById('contrast-level').textContent = data.contrast.level;
+            document.getElementById('font-size').innerHTML = `${data.contrast.fontSize} <span class="text-emerald-400">(Large)</span>`;
+
+            // Margins
+            document.getElementById('margin-score').textContent = data.margins.score;
+            document.getElementById('margin-h').textContent = `${data.margins.left}% / ${data.margins.right}%`;
+            document.getElementById('margin-avg').textContent = `${data.margins.avg}%`;
+
+            // Alignment
+            document.getElementById('alignment-score').textContent = data.alignment.score;
+            document.getElementById('alignment-quality').textContent = data.alignment.quality;
+            document.getElementById('alignment-bar').style.width = `${data.alignment.score * 10}%`;
+
+            // Whitespace
+            document.getElementById('whitespace-score').textContent = data.whitespace.score;
+            document.getElementById('whitespace-pct').textContent = `${data.whitespace.percentage}%`;
+
+            // Per-slide cards
+            const container = document.getElementById('per-slide-metrics');
+            container.innerHTML = '';
+            
+            data.slides.forEach(slide => {
+                const el = document.createElement('div');
+                el.className = `p-4 rounded-2xl border ${slide.score >= 8.5 ? 'border-emerald-900 bg-emerald-950/30' : 'border-zinc-800 bg-zinc-950'}`;
+                el.innerHTML = `
+                    <div class="flex justify-between items-center">
+                        <div class="font-mono text-xs text-zinc-500">Slide ${slide.slide}</div>
+                        <div class="font-semibold text-lg tabular-nums">${slide.score}</div>
+                    </div>
+                    <div class="text-xs mt-2 flex justify-between">
+                        <span class="text-zinc-400">${slide.contrast}</span>
+                        <span class="font-mono text-emerald-400">${slide.font}</span>
+                    </div>
+                `;
+                container.appendChild(el);
+            });
+        }
+
+        function simulateNewAnalysis() {
+            const btns = document.querySelectorAll('button');
+            btns.forEach(b => b.disabled = true);
+            
+            // Simulate processing
+            setTimeout(() => {
+                // Randomize slightly for demo effect
+                const newData = JSON.parse(JSON.stringify(sampleMetrics));
+                newData.overall = (7.8 + Math.random() * 1.8).toFixed(1);
+                newData.contrast.score = (8.5 + Math.random() * 1.3).toFixed(1);
+                
+                renderDashboard(newData);
+                btns.forEach(b => b.disabled = false);
+            }, 1200);
+        }
+
+        // Initialize
+        window.onload = () => {
+            renderDashboard(sampleMetrics);
+        }
+    </script>
+</body>
+</html>

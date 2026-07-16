@@ -1,0 +1,35 @@
+version: "3.9"
+services:
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+
+  api:
+    build: .
+    ports:
+      - "8000:8000"
+    environment:
+      - REDIS_URL=redis://redis:6379/0
+    volumes:
+      - ./:/app
+      - /tmp/audit_copilot_decks:/tmp/audit_copilot_decks
+    depends_on:
+      - redis
+    command: uvicorn main:app --host 0.0.0.0 --port 8000 --reload
+
+  worker:
+    build: .
+    environment:
+      - REDIS_URL=redis://redis:6379/0
+    volumes:
+      - ./:/app
+      - /tmp/audit_copilot_decks:/tmp/audit_copilot_decks
+    depends_on:
+      - redis
+    command: rq worker audit_high audit_default --url redis://redis:6379/0
+
+volumes:
+  redis_data:
