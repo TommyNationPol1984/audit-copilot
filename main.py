@@ -1,9 +1,9 @@
 """
-Audit Copilot MEGA-ZORD v4.5 - Fast Auto Audit + Fine-Tuning Pipeline
+Audit Copilot MEGA-ZORD v4.6 - Fast Auto Audit + HF Models + Fine-Tuning Pipeline
 - Lightweight LLM (gemini-1.5-flash)
-- Parallel slide processing
-- Cached metrics
-- Training dataset pipeline for fine-tuning smaller models
+- HuggingFace NER for entity extraction
+- HuggingFace embeddings for semantic search
+- Fine-tuning pipeline for training smaller models
 - Target: 30-60 seconds for full audit
 """
 
@@ -22,9 +22,9 @@ from pathlib import Path
 log = structlog.get_logger(__name__)
 
 app = FastAPI(
-    title="Audit Copilot MEGA-ZORD v4.5",
-    description="Fast AI design audits + fine-tuning pipeline (30-60s)",
-    version="4.5.0"
+    title="Audit Copilot MEGA-ZORD v4.6",
+    description="Fast AI design audits + HuggingFace NLP + fine-tuning (30-60s)",
+    version="4.6.0"
 )
 
 # CORS
@@ -60,14 +60,15 @@ async def health():
     """Health check with version info."""
     return {
         "status": "ok",
-        "version": "4.5.0",
+        "version": "4.6.0",
         "model": "gemini-1.5-flash (fast)",
+        "nlp": "HuggingFace (NER, embeddings, classification)",
         "features": [
             "fast_auto_audit",
-            "parallel_processing",
-            "cached_metrics",
+            "entity_extraction",
+            "semantic_search",
             "training_pipeline",
-            "retry_logic"
+            "parallel_processing"
         ],
         "expected_audit_time": "30-60 seconds for 10 slides"
     }
@@ -110,31 +111,36 @@ async def analyze_deck(
     guidelines: str = "",
     max_slides: int = 10,
     store_for_training: bool = True,
+    extract_entities: bool = True,
     request: Request = None
 ):
     """
-    Fast auto audit of entire PDF deck.
-    Automatically stores successful audits in training pipeline.
+    Fast auto audit of entire PDF deck with NLP analysis.
     
     Args:
         pdf_path: Path to PDF file
-        guidelines: Design guidelines (optional)
-        max_slides: Max slides to audit (default 10 = ~30-60s, max 20)
-        store_for_training: Store output for fine-tuning (default true)
+        guidelines: Design guidelines
+        max_slides: Max slides (1-20, default 10)
+        store_for_training: Store for fine-tuning (default true)
+        extract_entities: Extract design entities via NER (default true)
     
     Returns:
-        Full audit with rationale, metrics, and training sample ID
+        Full audit with rationale, metrics, entities, and training ID
     
     Example response:
     {
         "status": "success",
-        "rationale": "Guideline 1: The deck follows...",
-        "bullets_analyzed": 5,
-        "slides_analyzed": 10,
-        "metrics_summary": {...},
-        "processing_time_seconds": 45.2,
-        "model": "gemini-1.5-flash",
-        "training_sample_id": "abc123..."  // ID for reference
+        "rationale": "...",
+        "entities": {
+            "DESIGN_PRINCIPLE": ["alignment", "hierarchy"],
+            "COLOR": ["blue", "white"],
+            "TYPOGRAPHY": ["sans-serif"]
+        },
+        "classification": {
+            "positive": 0.78,
+            "negative": 0.22
+        },
+        "training_sample_id": "abc123..."
     }
     """
     request_id = request.state.request_id
@@ -153,9 +159,7 @@ async def analyze_deck(
         log.info(
             "deck_audit_started",
             request_id=request_id,
-            pdf=pdf_path,
-            max_slides=max_slides,
-            store_for_training=store_for_training
+            extract_entities=extract_entities
         )
         
         result = run_full_audit_fast(
@@ -167,16 +171,36 @@ async def analyze_deck(
         )
         
         if result["status"] != "success":
-            log.error("deck_audit_failed", request_id=request_id, error=result.get("error"))
             raise HTTPException(status_code=500, detail=result.get("error"))
         
-        duration = result.get("total_processing_time_seconds", 0)
+        # Extract entities and classify if enabled
+        if extract_entities:
+            try:
+                from hf_models import get_hf_manager
+                
+                manager = get_hf_manager()
+                rationale = result.get("rationale", "")
+                
+                # Extract entities (NER)
+                entities = manager.extract_entities_from_audit(rationale)
+                if entities:
+                    result["entities"] = entities
+                    log.debug("entities_extracted", count=sum(len(v) for v in entities.values()))
+                
+                # Classify sentiment/category
+                classification = manager.categorize_audit(rationale)
+                if classification:
+                    result["classification"] = classification
+                    log.debug("audit_classified", categories=list(classification.keys()))
+                
+            except Exception as e:
+                log.warning("nlp_analysis_failed", error=str(e))
+                # Continue without NLP results
+        
         log.info(
             "deck_audit_success",
             request_id=request_id,
-            slides=result.get("slides_analyzed"),
-            duration=duration,
-            sample_stored=result.get("training_sample_id") is not None
+            duration=result.get("total_processing_time_seconds")
         )
         
         return result
@@ -198,16 +222,15 @@ async def batch_audit(
     request: Request = None
 ):
     """
-    Audit multiple PDFs in parallel (fast).
-    All successful audits automatically added to training pipeline.
+    Audit multiple PDFs with NLP analysis.
     
     Args:
         pdf_paths: List of PDF paths
-        guidelines: Design guidelines (applied to all)
+        guidelines: Design guidelines
         max_slides_per: Max slides per PDF
     
     Returns:
-        List of audit results with training sample IDs
+        List of audit results with entities and classifications
     """
     request_id = request.state.request_id
     
@@ -230,10 +253,7 @@ async def batch_audit(
                 max_slides=max_slides_per,
                 store_for_training=True
             )
-            results.append({
-                "pdf_path": pdf_path,
-                **result
-            })
+            results.append({"pdf_path": pdf_path, **result})
         
         log.info("batch_audit_complete", request_id=request_id, count=len(results))
         return {"results": results, "total_count": len(results)}
@@ -245,16 +265,214 @@ async def batch_audit(
         raise HTTPException(status_code=500, detail=str(e))
 
 
-# ==================== PIPELINE / FINE-TUNING ENDPOINTS ====================
+# ==================== NLP / ENTITY ENDPOINTS ====================
+
+@app.post("/nlp/extract-entities")
+async def extract_entities(
+    text: str,
+    request: Request = None
+):
+    """
+    Extract design entities (NER) from any text.
+    
+    Args:
+        text: Text to analyze
+    
+    Returns:
+        Extracted entities grouped by type
+    
+    Example:
+    POST /nlp/extract-entities
+    {"text": "The design uses sans-serif fonts with blue accent colors..."}
+    
+    Response:
+    {
+        "entities": {
+            "TYPOGRAPHY": ["sans-serif"],
+            "COLOR": ["blue"]
+        }
+    }
+    """
+    request_id = request.state.request_id
+    
+    try:
+        from hf_models import get_hf_manager
+        
+        manager = get_hf_manager()
+        entities = manager.extract_entities_from_audit(text)
+        
+        log.info(
+            "entities_extracted",
+            request_id=request_id,
+            entity_count=sum(len(v) for v in entities.values())
+        )
+        
+        return {
+            "status": "success",
+            "entities": entities,
+            "text_length": len(text)
+        }
+    
+    except Exception as e:
+        log.error("entity_extraction_error", request_id=request_id, error=str(e))
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/nlp/classify")
+async def classify_text(
+    text: str,
+    request: Request = None
+):
+    """
+    Classify audit text by sentiment/category.
+    
+    Args:
+        text: Text to classify
+    
+    Returns:
+        Classification scores
+    """
+    request_id = request.state.request_id
+    
+    try:
+        from hf_models import get_hf_manager
+        
+        manager = get_hf_manager()
+        classification = manager.categorize_audit(text)
+        
+        log.info("text_classified", request_id=request_id)
+        
+        return {
+            "status": "success",
+            "classification": classification
+        }
+    
+    except Exception as e:
+        log.error("classification_error", request_id=request_id, error=str(e))
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/nlp/embed")
+async def embed_text(
+    text: str,
+    request: Request = None
+):
+    """
+    Generate semantic embedding for text.
+    
+    Args:
+        text: Text to embed
+    
+    Returns:
+        Embedding vector (768-dim)
+    
+    Use for semantic search, clustering, similarity
+    """
+    request_id = request.state.request_id
+    
+    try:
+        from hf_models import get_hf_manager
+        
+        manager = get_hf_manager()
+        embedding = manager.embed_audit(text)
+        
+        if not embedding:
+            raise HTTPException(status_code=500, detail="Embedding generation failed")
+        
+        log.info("text_embedded", request_id=request_id, dim=len(embedding))
+        
+        return {
+            "status": "success",
+            "embedding": embedding,
+            "dimension": len(embedding),
+            "text_length": len(text)
+        }
+    
+    except HTTPException:
+        raise
+    except Exception as e:
+        log.error("embedding_error", request_id=request_id, error=str(e))
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/nlp/search-similar")
+async def search_similar_audits(
+    query: str,
+    audit_database: list,
+    top_k: int = 5,
+    request: Request = None
+):
+    """
+    Find similar audits using semantic search.
+    
+    Args:
+        query: Query text (audit rationale or guidelines)
+        audit_database: List of audit documents with 'rationale' field
+        top_k: Number of similar audits to return
+    
+    Returns:
+        Similar audits with similarity scores
+    
+    Example:
+    POST /nlp/search-similar
+    {
+        "query": "The deck uses inconsistent typography and poor color contrast",
+        "audit_database": [
+            {"id": "1", "rationale": "..."},
+            {"id": "2", "rationale": "..."}
+        ],
+        "top_k": 3
+    }
+    """
+    request_id = request.state.request_id
+    
+    try:
+        from hf_models import get_hf_manager
+        
+        if not audit_database:
+            raise ValueError("audit_database cannot be empty")
+        
+        if top_k < 1 or top_k > 100:
+            raise ValueError("top_k must be 1-100")
+        
+        manager = get_hf_manager()
+        results = manager.find_similar_audits(query, audit_database, top_k=top_k)
+        
+        # Format results
+        formatted = [
+            {
+                "audit": result[0],
+                "similarity_score": round(result[1], 4)
+            }
+            for result in results
+        ]
+        
+        log.info(
+            "similar_audits_found",
+            request_id=request_id,
+            count=len(formatted),
+            query_length=len(query)
+        )
+        
+        return {
+            "status": "success",
+            "query": query,
+            "results": formatted,
+            "result_count": len(formatted)
+        }
+    
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        log.error("similarity_search_error", request_id=request_id, error=str(e))
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# ==================== PIPELINE ENDPOINTS ====================
 
 @app.get("/pipeline/stats")
 async def pipeline_stats(request: Request):
-    """
-    Get fine-tuning pipeline statistics.
-    
-    Returns:
-        Pipeline health, sample count, quality metrics
-    """
+    """Get fine-tuning pipeline statistics."""
     try:
         from fine_tune_pipeline import get_pipeline
         pipeline = get_pipeline()
@@ -282,31 +500,12 @@ async def pipeline_export(
     only_validated: bool = False,
     request: Request = None
 ):
-    """
-    Export training dataset for fine-tuning.
-    
-    Args:
-        format: Output format (jsonl, completion, chat, parquet, custom)
-        min_quality: Minimum quality score 0-10
-        only_validated: Only export manually validated samples
-    
-    Returns:
-        File path and export metadata
-    
-    Example:
-    POST /pipeline/export
-    {
-        "format": "jsonl",
-        "min_quality": 8.0,
-        "only_validated": false
-    }
-    """
+    """Export training dataset for fine-tuning."""
     request_id = request.state.request_id
     
     try:
         from fine_tune_pipeline import get_pipeline, DatasetFormat
         
-        # Validate format
         try:
             dataset_format = DatasetFormat(format)
         except ValueError:
@@ -328,33 +527,21 @@ async def pipeline_export(
         if not export_path:
             raise HTTPException(
                 status_code=400,
-                detail=f"No samples meet criteria: quality>{min_quality}, validated_only={only_validated}"
+                detail=f"No samples meet criteria"
             )
         
-        log.info(
-            "pipeline_export_success",
-            request_id=request_id,
-            format=format,
-            file=export_path
-        )
+        log.info("pipeline_export_success", request_id=request_id, format=format)
         
         return {
             "status": "success",
             "format": format,
-            "file": export_path,
-            "instructions": {
-                "jsonl": "Use with OpenAI Fine-tuning API",
-                "completion": "Use with OpenAI Completion fine-tuning",
-                "chat": "Use with OpenAI Chat Completion fine-tuning",
-                "parquet": "Use with HuggingFace datasets library",
-                "custom": "Use as custom JSON structure"
-            }[format]
+            "file": export_path
         }
     
     except HTTPException:
         raise
     except Exception as e:
-        log.error("pipeline_export_failed", request_id=request_id, error=str(e))
+        log.error("pipeline_export_failed", error=str(e))
         raise HTTPException(status_code=500, detail=str(e))
 
 
@@ -365,18 +552,7 @@ async def pipeline_validate(
     notes: str = "",
     request: Request = None
 ):
-    """
-    Manually validate a training sample.
-    High-quality validated samples improve fine-tuning results.
-    
-    Args:
-        sample_id: ID from audit response (training_sample_id)
-        is_valid: Whether sample is valid for training
-        notes: Validation notes (quality issues, etc)
-    
-    Returns:
-        Updated sample status
-    """
+    """Manually validate a training sample."""
     request_id = request.state.request_id
     
     try:
@@ -386,62 +562,24 @@ async def pipeline_validate(
         success = pipeline.validate_sample(sample_id, is_valid, notes)
         
         if not success:
-            raise HTTPException(status_code=404, detail=f"Sample not found: {sample_id}")
+            raise HTTPException(status_code=404, detail=f"Sample not found")
         
-        log.info(
-            "sample_validated",
-            request_id=request_id,
-            sample_id=sample_id,
-            valid=is_valid
-        )
+        log.info("sample_validated", request_id=request_id, valid=is_valid)
         
         return {
             "status": "success",
             "sample_id": sample_id,
-            "is_valid": is_valid,
-            "notes": notes
+            "is_valid": is_valid
         }
     
     except HTTPException:
         raise
     except Exception as e:
-        log.error("validation_failed", request_id=request_id, error=str(e))
+        log.error("validation_failed", error=str(e))
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@app.get("/pipeline/download/{sample_id}")
-async def pipeline_download(sample_id: str, request: Request):
-    """
-    Download raw output of a specific training sample.
-    
-    Args:
-        sample_id: Sample ID from audit response
-    
-    Returns:
-        Raw JSON output
-    """
-    try:
-        from pathlib import Path
-        
-        sample_file = Path(f"/tmp/audit_copilot_pipeline/raw_outputs/{sample_id}.json")
-        
-        if not sample_file.exists():
-            raise HTTPException(status_code=404, detail=f"Sample not found: {sample_id}")
-        
-        return FileResponse(
-            sample_file,
-            media_type="application/json",
-            filename=f"{sample_id}.json"
-        )
-    
-    except HTTPException:
-        raise
-    except Exception as e:
-        log.error("download_failed", error=str(e))
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-# ==================== ROOT & UTILS ====================
+# ==================== ROOT ====================
 
 @app.get("/")
 async def root():
@@ -453,24 +591,29 @@ async def root():
         pass
     
     return {
-        "name": "Audit Copilot MEGA-ZORD v4.5",
-        "version": "4.5.0",
+        "name": "Audit Copilot MEGA-ZORD v4.6",
+        "version": "4.6.0",
         "model": "gemini-1.5-flash",
+        "nlp": "HuggingFace (NER, embeddings, classification)",
         "speed": "30-120 seconds per audit",
-        "pipeline": "Fine-tuning dataset collection enabled",
         "docs": "/docs",
         "endpoints": {
             "audit": {
                 "health": "GET /health",
-                "single_slide": "POST /analyze/slide",
-                "full_deck": "POST /analyze/deck",
-                "batch": "POST /analyze/deck/batch"
+                "analyze_slide": "POST /analyze/slide",
+                "analyze_deck": "POST /analyze/deck",
+                "batch_audit": "POST /analyze/deck/batch"
+            },
+            "nlp": {
+                "extract_entities": "POST /nlp/extract-entities",
+                "classify": "POST /nlp/classify",
+                "embed": "POST /nlp/embed",
+                "search_similar": "POST /nlp/search-similar"
             },
             "pipeline": {
                 "stats": "GET /pipeline/stats",
                 "export": "POST /pipeline/export",
-                "validate": "POST /pipeline/validate",
-                "download": "GET /pipeline/download/{sample_id}"
+                "validate": "POST /pipeline/validate"
             }
         }
     }
@@ -488,7 +631,7 @@ async def http_exception_handler(request: Request, exc: HTTPException):
 
 @app.on_event("startup")
 async def startup():
-    log.info("startup", version="4.5.0", model="gemini-1.5-flash", pipeline="enabled")
+    log.info("startup", version="4.6.0", model="gemini-1.5-flash", nlp="enabled")
 
 
 if __name__ == "__main__":
