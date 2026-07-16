@@ -1,10 +1,11 @@
 """
-Audit Logic v4.5 - Fast LLM Auto Audit
+Audit Logic v4.6 - Fast LLM Auto Audit + Training Pipeline
 - Lightweight model (gemini-1.5-flash vs 2.5-flash)
 - Streaming responses for faster perceived speed
 - Parallel slide processing
 - Cached quantitative metrics
 - Simplified prompts for speed without quality loss
+- INTEGRATED: Stores outputs for fine-tuning smaller models
 """
 
 from typing import List, Dict, Any, Optional, Generator
@@ -19,12 +20,25 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 import hashlib
 import json
 from pathlib import Path
+from datetime import datetime
 
 log = structlog.get_logger(__name__)
 
 # Cache directory for metrics
 METRICS_CACHE_DIR = Path("/tmp/audit_copilot_cache")
 METRICS_CACHE_DIR.mkdir(exist_ok=True)
+
+# Import pipeline
+try:
+    from fine_tune_pipeline import (
+        get_pipeline,
+        create_training_sample,
+        AuditSample
+    )
+    PIPELINE_AVAILABLE = True
+except ImportError:
+    PIPELINE_AVAILABLE = False
+    log.warning("fine_tune_pipeline_not_available")
 
 
 def configure_gemini(api_key: str, model: str = "gemini-1.5-flash"):
@@ -296,7 +310,9 @@ def generate_fast_audit(
             "slides_analyzed": len(slide_images),
             "metrics_summary": avg_metrics,
             "processing_time_seconds": round(duration, 1),
-            "model": "gemini-1.5-flash"
+            "model": "gemini-1.5-flash",
+            "guidelines": guidelines,
+            "pdf_name": Path(pdf_path).name
         }
     
     except Exception as e:
@@ -313,10 +329,12 @@ def run_full_audit_fast(
     pdf_path: str,
     guidelines: str,
     api_key: str = None,
-    max_slides: int = 10  # Reduced default for speed
+    max_slides: int = 10,
+    store_for_training: bool = True
 ) -> Dict[str, Any]:
     """
     End-to-end fast audit: PDF → images → parallel metrics → fast LLM.
+    Automatically stores outputs in pipeline for fine-tuning.
     
     Target: 30-60 seconds for 10 slides, 60-120 seconds for 20 slides.
     
@@ -325,6 +343,7 @@ def run_full_audit_fast(
         guidelines: Design guidelines
         api_key: Gemini API key
         max_slides: Max slides to process (10 = fast, 20 = slower)
+        store_for_training: Store output in pipeline (default True)
     
     Returns:
         Audit result
@@ -384,6 +403,18 @@ def run_full_audit_fast(
         if audit_result["status"] == "success":
             audit_result["total_slides"] = len(slide_images)
             audit_result["metrics"] = quantitative_metrics
+            
+            # Store in pipeline for fine-tuning (automatic)
+            if store_for_training and PIPELINE_AVAILABLE:
+                try:
+                    pipeline = get_pipeline()
+                    sample = create_training_sample(audit_result)
+                    if sample:
+                        sample_id = pipeline.add_sample(sample)
+                        audit_result["training_sample_id"] = sample_id
+                        log.info("sample_stored_in_pipeline", sample_id=sample_id)
+                except Exception as e:
+                    log.warning("pipeline_storage_failed", error=str(e))
         
         duration = time.time() - start_time
         audit_result["total_processing_time_seconds"] = round(duration, 1)
