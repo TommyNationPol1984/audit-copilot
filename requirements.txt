@@ -11,5 +11,9 @@ backoff>=2.2.1
 python-dotenv>=1.0.1
 prometheus-client>=0.21.0
 imagehash>=4.3.1
-pytesseract>=0.3.10  # For font size detection from images
+pytesseract>=0.3.10
 structlog>=24.4.0
+pydantic>=2.0.0
+pydantic-settings>=2.0.0
+httpx>=0.25.0
+
