@@ -1,0 +1,1492 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="theme-color" content="#0b1e2d">
+    <title>Audit Copilot — Production Edition</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <link id="pwa-manifest" rel="manifest" href="">
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
+        body { font-family: 'Inter', sans-serif; }
+        ::-webkit-scrollbar { width: 6px; height: 6px; }
+        ::-webkit-scrollbar-track { background: #f1f5f9; }
+        ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 3px; }
+        ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+        
+        .pulse-border { animation: pulse-border 2s cubic-bezier(0.4, 0, 0.6, 1) infinite; }
+        @keyframes pulse-border {
+            0%, 100% { border-color: #99f6e4; background-color: #f0fdfa; }
+            50% { border-color: #14b8a6; background-color: #ccfbf1; }
+        }
+    </style>
+</head>
+<body class="bg-slate-50 text-slate-800 min-h-screen flex flex-col">
+
+    <header class="bg-[#0b1e2d] text-white py-4 px-6 shadow-md flex justify-between items-center border-b border-teal-800 shrink-0">
+        <div class="flex items-center space-x-3">
+            <div class="bg-teal-600 p-2 rounded-lg text-white">
+                <i data-lucide="shield-check" class="w-6 h-6"></i>
+            </div>
+            <div>
+                <h1 class="text-lg font-bold tracking-tight">AUDIT COPILOT</h1>
+                <p class="text-xs text-teal-400 font-semibold">MEGA-ZORD PWA v4.0</p>
+            </div>
+        </div>
+        <div class="flex items-center space-x-4">
+            <button id="installPwaBtn" class="hidden text-xs bg-teal-500 hover:bg-teal-400 text-[#0b1e2d] font-bold px-3 py-1.5 rounded transition shadow-sm flex items-center space-x-1">
+                <i data-lucide="download-cloud" class="w-3.5 h-3.5"></i>
+                <span>Install on Chromebook</span>
+            </button>
+            <div class="text-xs text-slate-400 bg-slate-900 px-3 py-1.5 rounded-md border border-slate-700 flex items-center space-x-2">
+                <span>Storage:</span> 
+                <span id="storageModeBadge" class="text-amber-400 font-bold">Initializing DB Pool...</span>
+            </div>
+            <div class="text-xs text-slate-400 bg-slate-900 px-3 py-1.5 rounded-md border border-slate-700 flex items-center space-x-2">
+                <span>Model: <span class="text-teal-400 font-bold">Gemini 2.5 Flash</span></span>
+                <button data-action="open-config" class="text-slate-500 hover:text-white transition ml-1" title="Configure API / Environment">
+                    <i data-lucide="settings" class="w-3.5 h-3.5 pointer-events-none"></i>
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <div id="autonomousProgressOverlay" class="hidden fixed top-0 left-0 w-full h-full bg-slate-950/90 backdrop-blur-md flex flex-col justify-center items-center z-50 transition duration-300">
+        <div class="animate-spin rounded-full h-12 w-12 border-4 border-teal-500 border-t-transparent mb-6"></div>
+        <p class="text-lg font-bold uppercase tracking-wider text-teal-400 mb-2">Concurrent LLM Audit in Progress...</p>
+        <p id="autonomousStatusText" class="text-sm text-slate-300 mb-6">Orchestrating Gemini multimodal pool...</p>
+        <div class="w-full max-w-md bg-slate-800 rounded-full h-4 overflow-hidden border border-slate-700 shadow-inner">
+            <div id="autonomousProgressBar" class="bg-teal-500 h-4 rounded-full transition-all duration-300 shadow-[0_0_10px_rgba(20,184,166,0.8)]" style="width: 0%"></div>
+        </div>
+    </div>
+
+    <!-- API KEY MODAL FOR LOCAL CHROMEBOOK EXECUTION -->
+    <div id="apiConfigModal" class="hidden fixed inset-0 bg-slate-950/90 backdrop-blur-sm z-50 flex flex-col items-center justify-center">
+        <div class="bg-white rounded-xl shadow-2xl border border-slate-200 p-6 w-full max-w-md">
+            <div class="flex justify-between items-center mb-4 border-b border-slate-100 pb-3">
+                <h3 class="font-bold text-slate-900 text-sm uppercase tracking-wider flex items-center space-x-2">
+                    <i data-lucide="key" class="w-4 h-4 text-teal-600"></i>
+                    <span>Environment Variables</span>
+                </h3>
+                <button data-action="close-config" class="text-slate-400 hover:text-red-600 transition"><i data-lucide="x" class="w-5 h-5 pointer-events-none"></i></button>
+            </div>
+            <p class="text-xs text-slate-600 mb-4 leading-relaxed">For standalone ChromeOS/Desktop usage, you must provide your own Gemini API Key. This is stored securely in your browser's local IndexedDB and never sent to a third-party server.</p>
+            <div class="space-y-4">
+                <div>
+                    <label class="block text-[10px] font-bold text-slate-700 uppercase mb-1">Gemini API Key</label>
+                    <input type="password" id="customApiKeyInput" placeholder="AIzaSy..." class="w-full text-xs p-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-teal-600 font-mono">
+                </div>
+                <button data-action="save-config" class="w-full bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold py-2.5 px-4 rounded-lg transition shadow-sm flex items-center justify-center space-x-1.5">
+                    <i data-lucide="save" class="w-4 h-4 pointer-events-none"></i><span class="pointer-events-none">Save to Local Vault</span>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <main class="flex-1 max-w-[1800px] w-full mx-auto p-4 lg:p-6 grid grid-cols-1 lg:grid-cols-12 gap-6 overflow-hidden">
+
+        <!-- COLUMN 1: INGESTION & ASSETS -->
+        <section class="lg:col-span-3 flex flex-col space-y-6 h-full overflow-y-auto pr-2 pb-10">
+            
+            <div class="bg-white rounded-xl shadow-sm border border-slate-200 p-5">
+                <div class="flex justify-between items-center mb-4">
+                    <h2 class="font-bold text-slate-900 flex items-center space-x-2 text-sm uppercase tracking-wider">
+                        <i data-lucide="file-text" class="w-4 h-4 text-teal-600"></i>
+                        <span>1. Ingestion</span>
+                    </h2>
+                    <button data-action="clear-guidelines" class="text-[10px] text-red-600 hover:underline flex items-center space-x-1 font-medium bg-red-50 px-2 py-1 rounded transition">
+                        <i data-lucide="trash-2" class="w-3 h-3 pointer-events-none"></i>
+                        <span class="pointer-events-none">Clear All</span>
+                    </button>
+                </div>
+                
+                <div class="space-y-3">
+                    <div class="grid grid-cols-3 gap-1 bg-slate-100 p-1 rounded-lg text-[11px] font-medium">
+                        <button data-action="switch-tab" data-group="guide" data-target="paste" id="tab-guide-paste" class="py-1.5 px-2 rounded-md text-center bg-white shadow-sm text-slate-800 transition font-bold">Paste</button>
+                        <button data-action="switch-tab" data-group="guide" data-target="document" id="tab-guide-document" class="py-1.5 px-2 rounded-md text-center text-slate-600 hover:text-slate-900 transition">Doc</button>
+                        <button data-action="switch-tab" data-group="guide" data-target="image" id="tab-guide-image" class="py-1.5 px-2 rounded-md text-center text-slate-600 hover:text-slate-900 transition flex items-center justify-center space-x-1">
+                            <i data-lucide="camera" class="w-3 h-3 pointer-events-none"></i><span class="pointer-events-none">OCR</span>
+                        </button>
+                    </div>
+
+                    <div id="guide-paste-section" class="space-y-2">
+                        <textarea id="rawGuidelinesText" data-input-action="auto-save" rows="5" placeholder="Paste concise design guidelines here..." class="w-full text-xs p-3 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-600 font-mono"></textarea>
+                    </div>
+
+                    <div id="guide-document-section" class="hidden py-4 border-2 border-dashed border-slate-300 rounded-lg text-center bg-slate-50 hover:bg-slate-100 transition relative">
+                        <input type="file" id="guidelineDocInput" accept=".txt,.md" data-change-action="upload-doc" class="absolute inset-0 opacity-0 cursor-pointer">
+                        <div class="space-y-1 pointer-events-none">
+                            <i data-lucide="file-up" class="w-6 h-6 mx-auto text-slate-400"></i>
+                            <p class="text-xs font-semibold text-slate-700">Upload Text File</p>
+                        </div>
+                    </div>
+
+                    <div id="guide-image-section" class="hidden space-y-3">
+                        <div class="border-2 border-dashed border-slate-300 rounded-lg text-center bg-slate-50 hover:bg-slate-100 transition relative py-4">
+                            <input type="file" id="guidelineImageInput" multiple accept="image/*" data-change-action="upload-ocr-images" class="absolute inset-0 opacity-0 cursor-pointer">
+                            <div class="space-y-1 pointer-events-none">
+                                <i data-lucide="image" class="w-6 h-6 mx-auto text-slate-400"></i>
+                                <p class="text-xs font-semibold text-slate-700">Upload Screenshots</p>
+                            </div>
+                        </div>
+                        <div id="guidelineImagesDeckContainer" class="space-y-1.5 max-h-[160px] overflow-y-auto hidden border border-slate-100 p-2 rounded bg-slate-50"></div>
+                        <button data-action="run-ocr" id="btnRunOcr" class="hidden w-full bg-slate-900 hover:bg-slate-800 text-white text-[10px] font-bold py-2 px-3 rounded transition flex items-center justify-center space-x-1.5">
+                            <i data-lucide="sparkles" class="w-3 h-3 pointer-events-none"></i><span class="pointer-events-none">Extract with Gemini</span>
+                        </button>
+                    </div>
+
+                    <div class="pt-2 flex space-x-2">
+                        <button data-action="synthesize-guidelines" class="flex-1 bg-slate-800 hover:bg-slate-900 text-white text-[10px] font-bold py-2 px-2 rounded-lg transition shadow-sm flex items-center justify-center space-x-1" title="Deduplicate and clean rules using LLM">
+                            <i data-lucide="wand-2" class="w-3 h-3 pointer-events-none"></i>
+                            <span class="pointer-events-none">Clean via LLM</span>
+                        </button>
+                        <button data-action="generate-ledger" class="flex-1 bg-teal-700 hover:bg-teal-800 text-white text-[10px] font-bold py-2 px-2 rounded-lg transition shadow-sm flex items-center justify-center space-x-1" title="Parse text into interactive cards">
+                            <i data-lucide="layout-list" class="w-3 h-3 pointer-events-none"></i>
+                            <span class="pointer-events-none">Build Matrix</span>
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <div class="bg-white rounded-xl shadow-sm border border-slate-200 p-5 flex flex-col flex-1">
+                <div class="flex justify-between items-center mb-3">
+                    <h2 class="font-bold text-slate-900 flex items-center space-x-2 text-sm uppercase tracking-wider">
+                        <i data-lucide="presentation" class="w-4 h-4 text-teal-600"></i>
+                        <span>2. Slide Gallery</span>
+                    </h2>
+                    <button data-action="clear-slides" class="text-[10px] text-red-600 hover:underline flex items-center space-x-1 font-medium bg-red-50 px-2 py-1 rounded transition">
+                        <i data-lucide="trash-2" class="w-3 h-3 pointer-events-none"></i>
+                        <span class="pointer-events-none">Clear</span>
+                    </button>
+                </div>
+
+                <div class="border-2 border-dashed border-slate-200 rounded-lg p-3 text-center bg-slate-50 hover:bg-slate-100 transition relative mb-3">
+                    <input type="file" multiple accept="image/*" data-change-action="upload-slides" class="absolute inset-0 opacity-0 cursor-pointer">
+                    <div class="space-y-0.5 pointer-events-none">
+                        <p class="text-xs font-semibold text-slate-700">Upload Presentation Images</p>
+                        <p class="text-[9px] text-slate-500">Supports massive decks. Drag to reorder.</p>
+                    </div>
+                </div>
+
+                <div id="slideLoadProgressSpinner" class="hidden bg-slate-50 border border-slate-200 p-2.5 rounded-lg mb-3 flex items-center justify-center space-x-2">
+                    <div class="animate-spin rounded-full h-4 w-4 border-2 border-teal-600 border-t-transparent"></div>
+                    <span id="slideLoadProgressText" class="text-[11px] font-bold text-teal-700">Converting slide index...</span>
+                </div>
+
+                <div class="flex-1 overflow-y-auto pr-1" id="slideDeckContainer">
+                    <p class="text-[11px] text-slate-400 text-center py-8">Upload slides to activate matrix.</p>
+                </div>
+            </div>
+        </section>
+
+        <!-- COLUMN 2: EVALUATION MATRIX -->
+        <section class="lg:col-span-6 flex flex-col space-y-6 h-full overflow-y-auto pr-2 pb-10">
+            <div class="bg-white rounded-xl shadow-sm border border-slate-200 p-5 flex flex-col h-full">
+                <div class="flex justify-between items-center mb-4 pb-3 border-b border-slate-100">
+                    <div>
+                        <h2 class="font-bold text-slate-900 flex items-center space-x-2 text-sm uppercase tracking-wider">
+                            <i data-lucide="clipboard-signature" class="w-4 h-4 text-teal-600"></i>
+                            <span>3. Audit Matrix</span>
+                        </h2>
+                        <p class="text-[10px] text-slate-500">Strict 3-sentence compliance enforcement powered by high-intelligence AI.</p>
+                    </div>
+                    <button data-action="run-autonomous-audit" class="bg-gradient-to-r from-teal-600 to-teal-500 hover:from-teal-700 hover:to-teal-600 text-white text-[11px] font-extrabold px-4 py-2 rounded-lg uppercase flex items-center space-x-1.5 shadow-md hover:shadow-lg transition transform hover:scale-105">
+                        <i data-lucide="bot" class="w-4 h-4 pointer-events-none"></i>
+                        <span class="pointer-events-none">Auto-Audit All via LLM</span>
+                    </button>
+                </div>
+
+                <div id="evaluationMatrix" class="space-y-4 flex-1">
+                    <div class="flex flex-col items-center justify-center text-center py-20 text-slate-400 space-y-3">
+                        <div class="bg-slate-100 p-4 rounded-full"><i data-lucide="drafting-compass" class="w-10 h-10 text-slate-300"></i></div>
+                        <p class="text-xs max-w-xs font-medium">Parse instructions and upload slides to generate the evaluation matrix.</p>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- COLUMN 3: SYNTHESIS & EXPORT -->
+        <section class="lg:col-span-3 flex flex-col space-y-6 h-full overflow-y-auto pr-2 pb-10">
+
+            <div class="bg-white rounded-xl shadow-sm border border-slate-200 p-5">
+                <div class="flex justify-between items-center mb-3">
+                    <h3 class="font-bold text-slate-900 text-xs uppercase tracking-wider flex items-center space-x-2">
+                        <i data-lucide="check-square" class="w-4 h-4 text-teal-600"></i>
+                        <span>4. Synthesis & Score</span>
+                    </h3>
+                    <button data-action="draft-recommendation" class="bg-slate-900 hover:bg-slate-800 text-white text-[9px] font-bold px-2 py-1.5 rounded transition flex items-center space-x-1 shadow-sm">
+                        <i data-lucide="sparkles" class="w-3 h-3 pointer-events-none"></i>
+                        <span class="pointer-events-none">Draft via LLM</span>
+                    </button>
+                </div>
+
+                <div class="space-y-3">
+                    <div class="bg-slate-50 p-2.5 rounded-lg border border-slate-200 shadow-inner">
+                        <label class="block text-[10px] font-bold text-slate-700 uppercase mb-1">Assigned Score (1–7)</label>
+                        <select id="numericScore" data-change-action="update-compliance" class="w-full text-xs p-1.5 border border-slate-300 rounded focus:ring-2 focus:ring-teal-600 font-semibold bg-white shadow-sm">
+                            <option value="1">1 (Massive Deviations)</option>
+                            <option value="2">2 (Severe Deviations)</option>
+                            <option value="3">3 (Noticeable Deviations)</option>
+                            <option value="4" selected>4 (Neutral / Mid-Grade)</option>
+                            <option value="5">5 (Minor Deviations)</option>
+                            <option value="6">6 (High Adherence)</option>
+                            <option value="7">7 (Perfect Adherence)</option>
+                        </select>
+                        <div class="mt-2 flex items-center justify-between border-t border-slate-200 pt-2">
+                            <span class="text-[9px] text-slate-500 font-semibold uppercase flex items-center space-x-1">
+                                <i data-lucide="brain-circuit" class="w-3 h-3"></i><span>LLM Suggested:</span>
+                            </span>
+                            <div class="flex items-center">
+                                <span id="suggestedScoreBadge" class="bg-slate-200 text-slate-500 text-[10px] font-bold px-1.5 py-0.5 rounded shadow-sm" data-score="">—</span>
+                                <button data-action="apply-suggested-score" class="ml-1 text-[9px] bg-teal-100 text-teal-800 hover:bg-teal-200 font-bold px-1.5 py-0.5 rounded transition shadow-sm">Apply</button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div>
+                        <label class="block text-[10px] font-bold text-slate-700 uppercase mb-1">Aesthetics Paragraph</label>
+                        <textarea id="aestheticsText" data-input-action="update-compliance" rows="3" placeholder="Discuss overall styling..." class="w-full text-[11px] p-2 border border-slate-300 rounded-lg focus:ring-1 focus:ring-teal-600 shadow-sm"></textarea>
+                    </div>
+
+                    <div>
+                        <label class="block text-[10px] font-bold text-slate-700 uppercase mb-1">Final Weighing Synthesis</label>
+                        <textarea id="finalWeightingText" data-input-action="update-compliance" rows="3" placeholder="State score decision and weigh deviations..." class="w-full text-[11px] p-2 border border-slate-300 rounded-lg focus:ring-1 focus:ring-teal-600 shadow-sm"></textarea>
+                    </div>
+                </div>
+            </div>
+
+            <div class="bg-white rounded-xl shadow-sm border border-slate-200 p-5">
+                <div class="flex justify-between items-center mb-3">
+                    <h3 class="font-bold text-slate-900 text-xs uppercase tracking-wider flex items-center space-x-1.5">
+                        <i data-lucide="file-check-2" class="w-4 h-4 text-teal-600"></i>
+                        <span>5. Compile & Finalize</span>
+                    </h3>
+                    <span id="validationFinalBadge" class="bg-rose-100 text-rose-800 text-[9px] font-extrabold px-2 py-0.5 rounded-full uppercase shadow-sm">Failing Checks</span>
+                </div>
+
+                <div class="relative bg-slate-950 text-slate-100 p-2.5 rounded-lg text-[10px] font-mono max-h-[150px] overflow-y-auto mb-3 border border-slate-800 shadow-inner">
+                    <pre id="compiledOutputBlock" class="whitespace-pre-wrap select-all">Matrix empty...</pre>
+                </div>
+
+                <div class="space-y-2">
+                    <button data-action="copy-rationale" class="w-full bg-teal-700 hover:bg-teal-800 text-white text-[11px] font-bold py-2.5 px-4 rounded-lg transition shadow-md flex items-center justify-center space-x-1.5 transform hover:-translate-y-0.5">
+                        <i data-lucide="copy" class="w-3.5 h-3.5 pointer-events-none"></i><span class="pointer-events-none">Copy Compiled Rationale</span>
+                    </button>
+                    <button data-action="reset-presentation" class="w-full bg-red-50 hover:bg-red-100 text-red-700 border border-red-200 text-[10px] font-bold py-2 px-4 rounded-lg transition flex items-center justify-center space-x-1.5 shadow-sm">
+                        <i data-lucide="refresh-cw" class="w-3 h-3 pointer-events-none"></i><span class="pointer-events-none">Reset for Next Deck</span>
+                    </button>
+                </div>
+            </div>
+
+            <div class="bg-white rounded-xl shadow-sm border border-slate-200 p-5">
+                <div class="flex justify-between items-center mb-3">
+                    <h3 class="font-bold text-slate-900 text-xs uppercase tracking-wider flex items-center space-x-1.5">
+                        <i data-lucide="activity" class="w-4 h-4 text-teal-600"></i>
+                        <span>6. Batch Ledger</span>
+                    </h3>
+                    <button data-action="clear-batch" class="text-[9px] text-red-600 hover:underline transition">Clear History</button>
+                </div>
+                
+                <div class="space-y-1.5 max-h-[100px] overflow-y-auto pr-1" id="batchLedgerItems"></div>
+
+                <div class="mt-3 pt-3 border-t border-slate-100 flex justify-between items-center">
+                    <button data-action="add-to-batch" class="bg-slate-100 hover:bg-slate-200 text-slate-700 text-[10px] font-bold py-1.5 px-2.5 rounded-md transition flex items-center space-x-1 shadow-sm">
+                        <i data-lucide="plus" class="w-3 h-3 pointer-events-none"></i><span class="pointer-events-none">Log Deck</span>
+                    </button>
+                    <span id="batchValidationBadge" class="text-[9px] font-bold px-2 py-1 rounded bg-slate-100 text-slate-600 shadow-sm">No data</span>
+                </div>
+            </div>
+
+        </section>
+
+    </main>
+
+    <!-- TOAST CONTAINER -->
+    <div id="toastContainer" class="fixed bottom-5 right-5 z-50 flex flex-col space-y-2 pointer-events-none max-w-sm"></div>
+
+    <!-- ZOOM MODAL -->
+    <div id="zoomModal" class="fixed inset-0 bg-slate-950/90 backdrop-blur-sm z-50 flex flex-col items-center justify-center hidden" data-action="close-modal">
+        <button data-action="close-modal" class="absolute top-5 right-5 text-white bg-slate-800/80 p-2 rounded-full hover:bg-slate-700 transition shadow-lg">
+            <i data-lucide="x" class="w-6 h-6 pointer-events-none"></i>
+        </button>
+        <img id="zoomedImageContainer" class="max-w-[90vw] max-h-[85vh] object-contain rounded shadow-2xl border border-slate-700" src="" alt="Zoom">
+        <p id="zoomedTitle" class="text-slate-300 mt-4 text-xs font-semibold uppercase tracking-wider bg-slate-900/80 px-4 py-1.5 rounded-full"></p>
+    </div>
+
+    <!-- PWA MANIFEST INJECTION SCRIPT -->
+    <script>
+        const pwaManifest = {
+            "name": "Audit Copilot Desktop",
+            "short_name": "Audit Copilot",
+            "description": "High-Intelligence Presentation Compliance Auditor",
+            "display": "standalone",
+            "start_url": ".",
+            "background_color": "#0b1e2d",
+            "theme_color": "#0b1e2d",
+            "icons": [
+                {
+                    "src": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgc3Ryb2tlPSIjMTRiOGE2IiBzdHJva2Utd2lkdGg9IjIiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIgc3Ryb2tlLWxpbmVqb2luPSJyb3VuZCI+PHBhdGggZD0iTTEyIDIybTgtNG0wLTRsLTEuNS0xLjVMMjAgMTRsLTEtMW0tNCAwTDE0IDIybS00LTRtMC00bTEuNS0xLjVMMTAgMTRsMS0xIi8+PC9zdmc+",
+                    "sizes": "192x192",
+                    "type": "image/svg+xml"
+                },
+                {
+                    "src": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgc3Ryb2tlPSIjMTRiOGE2IiBzdHJva2Utd2lkdGg9IjIiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIgc3Ryb2tlLWxpbmVqb2luPSJyb3VuZCI+PHBhdGggZD0iTTEyIDIybTgtNG0wLTRsLTEuNS0xLjVMMjAgMTRsLTEtMW0tNCAwTDE0IDIybS00LTRtMC00bTEuNS0xLjVMMTAgMTRsMS0xIi8+PC9zdmc+",
+                    "sizes": "512x512",
+                    "type": "image/svg+xml"
+                }
+            ]
+        };
+        document.getElementById('pwa-manifest').href = 'data:application/manifest+json,' + encodeURIComponent(JSON.stringify(pwaManifest));
+
+        // Mega-Zord Offline Service Worker via Data URI (Sandbox Bypass)
+        if ('serviceWorker' in navigator) {
+            try {
+                const swCode = `
+                    const CACHE_NAME = 'audit-copilot-v4-cache';
+                    const urlsToCache = ['/', 'https://cdn.tailwindcss.com', 'https://unpkg.com/lucide@latest'];
+                    self.addEventListener('install', e => { e.waitUntil(caches.open(CACHE_NAME).then(c => c.addAll(urlsToCache))); self.skipWaiting(); });
+                    self.addEventListener('activate', e => { e.waitUntil(caches.keys().then(keys => Promise.all(keys.map(k => k !== CACHE_NAME ? caches.delete(k) : null)))); self.clients.claim(); });
+                    self.addEventListener('fetch', e => {
+                        e.respondWith(caches.match(e.request).then(res => res || fetch(e.request).then(fRes => {
+                            return caches.open(CACHE_NAME).then(c => { c.put(e.request, fRes.clone()); return fRes; });
+                        }).catch(() => new Response("Offline Network Intercepted.", {status: 200}))));
+                    });
+                `;
+                const blob = new Blob([swCode], { type: 'application/javascript' });
+                const swUrl = URL.createObjectURL(blob);
+                // Catching execution gracefully to avoid red consoles in restrictive iframes while enabling it in standalone
+                navigator.serviceWorker.register(swUrl).catch(() => console.log('Service Worker context restricted. Normal in iframes.'));
+            } catch(e) {}
+        }
+
+        let deferredPrompt;
+        window.addEventListener('beforeinstallprompt', (e) => {
+            e.preventDefault();
+            deferredPrompt = e;
+            const btn = document.getElementById('installPwaBtn');
+            if(btn) btn.classList.remove('hidden');
+        });
+    </script>
+
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, signInWithCustomToken, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, doc, setDoc, getDoc, collection, onSnapshot, deleteDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+        window.addEventListener('unhandledrejection', function(event) {
+            console.warn('Caught background promise rejection:', event.reason);
+            event.preventDefault();
+        });
+
+        // The execution environment securely provides the key at runtime
+        const apiKey = ""; 
+
+        // ==========================================
+        // 1. CONFIG & STORE (STATE MANAGEMENT)
+        // ==========================================
+        const Config = {
+            appId: typeof __app_id !== 'undefined' ? __app_id : 'default-app-id',
+            firebaseConfig: typeof __firebase_config !== 'undefined' && __firebase_config ? JSON.parse(__firebase_config) : null,
+            initialAuthToken: typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null,
+            failSeverityThreshold: "major"
+        };
+
+        const Store = {
+            state: {
+                guidelines: [],
+                slides: [],
+                guidelineImages: [],
+                evaluations: {},
+                batch: [],
+                draggedSlideId: null,
+            },
+            listeners: [],
+            getState() { return this.state; },
+            setState(updates) {
+                this.state = { ...this.state, ...updates };
+                this.listeners.forEach(fn => fn(this.state));
+            },
+            subscribe(fn) { this.listeners.push(fn); },
+            updateEvaluation(idx, data) {
+                this.state.evaluations[idx] = { ...this.state.evaluations[idx], ...data };
+                this.listeners.forEach(fn => fn(this.state));
+            }
+        };
+
+        // ==========================================
+        // 2. UTILS
+        // ==========================================
+        const Utils = {
+            escapeHtml(val) {
+                return String(val ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#039;");
+            },
+            escapeAttr(val) { return this.escapeHtml(val).replace(/`/g, "&#096;"); },
+            parseGuideline(line) { return line.trim().replace(/^[-*•■□]\s+/, "").replace(/^\d+[\.)]\s+/, "").trim(); },
+            countSentences(text) {
+                if (!text || !text.trim()) return 0;
+                const normalized = text.replace(/\b(e\.g|i\.e|etc|vs|fig|mr|mrs|ms|dr)\./gi, m => m.replace(".", "<DOT>"))
+                                       .replace(/\bU\.S\./g, "U<DOT>S<DOT>").replace(/\bU\.K\./g, "U<DOT>K<DOT>");
+                return normalized.split(/[.!?]+(?=\s|$)/).map(s => s.replace(/<DOT>/g, ".").trim()).filter(Boolean).length;
+            },
+            hasEvidenceMarkers(text) {
+                const markers = [ /#[0-9a-f]{3,6}\b/i, /\b(px|rem|em|%|vw|vh)\b/i, /\b(left|right|center|justify)\b/i, /\b(top|bottom|middle)\b/i, /\bgrid\b/i, /\balignment\b/i, /\bmargin\b|\bpadding\b/i, /\btypeface\b|\bfont\b|\bspacing\b|\bsize\b/i, /\bcontrast\b/i ];
+                return markers.some(r => r.test(text.toLowerCase()));
+            },
+            severityRank(s) { return { minor: 0, moderate: 1, major: 2, critical: 3 }[s] ?? -1; },
+            async compressImage(base64Str, maxWidth = 1280, maxHeight = 720, quality = 0.6) {
+                return new Promise((resolve) => {
+                    const img = new Image();
+                    img.onload = () => {
+                        let { width, height } = img;
+                        if (width > maxWidth || height > maxHeight) {
+                            if (width > height) { height = Math.round((height * maxWidth) / width); width = maxWidth; } 
+                            else { width = Math.round((width * maxHeight) / height); height = maxHeight; }
+                        }
+                        const canvas = document.createElement('canvas');
+                        canvas.width = width; canvas.height = height;
+                        canvas.getContext('2d').drawImage(img, 0, 0, width, height);
+                        const res = canvas.toDataURL('image/jpeg', quality);
+                        canvas.width = 0; canvas.height = 0; img.src = ''; 
+                        resolve(res);
+                    };
+                    img.onerror = () => resolve(base64Str);
+                    img.src = base64Str;
+                });
+            },
+            readFile(file) {
+                return new Promise((resolve, reject) => {
+                    const reader = new FileReader();
+                    reader.onload = () => resolve(reader.result);
+                    reader.onerror = reject;
+                    reader.readAsDataURL(file);
+                });
+            },
+            async readAndCompressFile(file, maxWidth = 1280, maxHeight = 720, quality = 0.6) {
+                const base64 = await this.readFile(file);
+                return await this.compressImage(base64, maxWidth, maxHeight, quality);
+            }
+        };
+
+        // ==========================================
+        // 3. INDEXED_DB (PERSISTENT SINGLETON POOL)
+        // ==========================================
+        const LocalDB = {
+            dbInstance: null,
+            async init() {
+                if (this.dbInstance) return this.dbInstance;
+                return new Promise((resolve, reject) => {
+                    const req = indexedDB.open('AuditCopilotDB_V4', 3);
+                    req.onupgradeneeded = (e) => { 
+                        const db = e.target.result;
+                        if(!db.objectStoreNames.contains('store')) db.createObjectStore('store'); 
+                    };
+                    req.onsuccess = () => {
+                        this.dbInstance = req.result;
+                        resolve(req.result);
+                    };
+                    req.onerror = () => reject(req.error);
+                });
+            },
+            async get(key) {
+                const db = await this.init();
+                return new Promise(res => {
+                    try {
+                        const tx = db.transaction('store', 'readonly');
+                        const req = tx.objectStore('store').get(key);
+                        req.onsuccess = () => res(req.result);
+                        req.onerror = () => res(null);
+                    } catch(e) { res(null); }
+                });
+            },
+            async set(key, val) {
+                const db = await this.init();
+                return new Promise(res => {
+                    try {
+                        const tx = db.transaction('store', 'readwrite');
+                        tx.objectStore('store').put(val, key);
+                        tx.oncomplete = () => res();
+                        tx.onerror = () => res();
+                    } catch(e) { res(); }
+                });
+            },
+            async clearAll() {
+                const db = await this.init();
+                return new Promise(res => {
+                    try {
+                        const tx = db.transaction('store', 'readwrite');
+                        tx.objectStore('store').clear();
+                        tx.oncomplete = () => res();
+                    } catch(e) { res(); }
+                });
+            }
+        };
+
+        // ==========================================
+        // 4. GEMINI SERVICE (HIGH INTELLIGENCE)
+        // ==========================================
+        const Gemini = {
+            async call(payload) {
+                let activeKey = apiKey;
+                const savedKey = await LocalDB.get("AUDIT_CUSTOM_API_KEY");
+                if (savedKey) activeKey = savedKey;
+
+                const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${activeKey}`;
+                let delay = 1000;
+                
+                for (let i = 0; i < 5; i++) {
+                    try {
+                        const response = await fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
+                        if (response.ok) return await response.json();
+                        if (response.status === 429 || response.status >= 500) {
+                            await new Promise(r => setTimeout(r, delay)); delay *= 2; continue;
+                        }
+                        const err = await response.json();
+                        throw new Error(err.error?.message || "API Error");
+                    } catch (e) {
+                        if (i === 4) throw e;
+                        await new Promise(r => setTimeout(r, delay)); delay *= 2;
+                    }
+                }
+            }
+        };
+
+        // ==========================================
+        // 5. UI RENDERER
+        // ==========================================
+        const UI = {
+            showToast(title, message, type = 'info') {
+                const c = document.getElementById('toastContainer');
+                if (!c) return;
+                const colors = { info: 'bg-slate-900', success: 'bg-emerald-950 text-emerald-100', error: 'bg-rose-950 text-rose-100', warning: 'bg-amber-950 text-amber-100' };
+                const icons = { info: 'info', success: 'check-circle-2', error: 'alert-triangle', warning: 'alert-circle' };
+                const t = document.createElement('div');
+                t.className = `p-4 rounded-xl shadow-lg ${colors[type] || colors.info} text-white text-xs transition duration-300 transform translate-y-2 opacity-0 flex space-x-3 pointer-events-auto`;
+                t.innerHTML = `<div class="mt-0.5"><i data-lucide="${icons[type]}" class="w-4 h-4"></i></div><div><p class="font-bold uppercase">${Utils.escapeHtml(title)}</p><p class="mt-0.5 opacity-90 text-[11px]">${Utils.escapeHtml(message)}</p></div>`;
+                c.appendChild(t);
+                if (window.lucide) window.lucide.createIcons();
+                setTimeout(() => t.classList.remove('translate-y-2', 'opacity-0'), 10);
+                setTimeout(() => { t.classList.add('opacity-0'); setTimeout(() => t.remove(), 300); }, 4000);
+            },
+
+            toggleModal(id, forceState = null) {
+                const modal = document.getElementById(id);
+                if (!modal) return;
+                if (forceState === 'open' || modal.classList.contains('hidden')) {
+                    modal.classList.remove('hidden');
+                } else {
+                    modal.classList.add('hidden');
+                }
+            },
+
+            switchTab(group, activeTab) {
+                const tabs = ['paste', 'document', 'image'];
+                tabs.forEach(tab => {
+                    const button = document.getElementById(`tab-${group}-${tab}`);
+                    const section = document.getElementById(`${group}-${tab}-section`);
+                    if (tab === activeTab) {
+                        if (button) button.className = "py-1.5 px-2 rounded-md text-center bg-white shadow-sm text-slate-800 transition font-bold";
+                        if (section) section.classList.remove('hidden');
+                    } else {
+                        if (button) button.className = "py-1.5 px-2 rounded-md text-center text-slate-600 hover:text-slate-900 transition";
+                        if (section) section.classList.add('hidden');
+                    }
+                });
+            },
+
+            zoomImage(src, title) {
+                const container = document.getElementById('zoomedImageContainer');
+                const titleEl = document.getElementById('zoomedTitle');
+                if (container) container.src = src;
+                if (titleEl) titleEl.innerText = title;
+                this.toggleModal('zoomModal', 'open');
+            },
+
+            renderSlides() {
+                const { slides } = Store.getState();
+                const container = document.getElementById('slideDeckContainer');
+                const badge = document.getElementById('slideDeckCountBadge');
+                if (!container) return;
+                if (badge) badge.innerText = `${slides.length} Slides`;
+
+                if (!slides.length) {
+                    container.innerHTML = `<p class="text-[11px] text-slate-400 text-center py-12">No slides uploaded yet.</p>`;
+                    return;
+                }
+
+                container.innerHTML = `<div class="grid grid-cols-2 gap-2">${slides.map(s => `
+                    <div class="bg-slate-50 border border-slate-200 rounded p-1.5 hover:bg-slate-100 group relative transition shadow-sm">
+                        <img src="${s.base64}" data-action="zoom-image" data-title="${Utils.escapeAttr(s.name)}" class="w-full h-16 object-cover rounded cursor-pointer border border-slate-300 hover:opacity-90">
+                        <div class="mt-1 flex justify-between items-center">
+                            <span class="text-[10px] font-bold text-slate-800">${Utils.escapeHtml(s.name)}</span>
+                            <button data-action="remove-slide" data-id="${Utils.escapeAttr(s.id)}" class="text-slate-400 hover:text-red-600 p-0.5"><i data-lucide="trash-2" class="w-3 h-3 pointer-events-none"></i></button>
+                        </div>
+                    </div>`).join('')}</div>`;
+                if (window.lucide) window.lucide.createIcons();
+            },
+
+            renderOcrQueue() {
+                const { guidelineImages } = Store.getState();
+                const container = document.getElementById('guidelineImagesDeckContainer');
+                const btn = document.getElementById('btnRunOcr');
+                if (!container) return;
+
+                if (!guidelineImages.length) {
+                    container.classList.add('hidden');
+                    if (btn) btn.classList.add('hidden');
+                    return;
+                }
+
+                container.classList.remove('hidden');
+                if (btn) btn.classList.remove('hidden');
+
+                container.innerHTML = guidelineImages.map(img => `
+                    <div class="flex items-center space-x-2 bg-slate-50 border border-slate-200 rounded p-1.5 text-[10px] shadow-sm">
+                        <img src="${img.base64}" data-action="zoom-image" class="w-8 h-6 object-cover rounded cursor-pointer border border-slate-300">
+                        <div class="flex-1 truncate font-semibold text-slate-800">${Utils.escapeHtml(img.name)}</div>
+                        <span class="${img.parsed ? 'text-emerald-600' : 'text-amber-600'} font-bold">${img.parsed ? '✓' : 'Wait'}</span>
+                        <button data-action="remove-ocr" data-id="${Utils.escapeAttr(img.id)}" class="text-slate-400 hover:text-red-600"><i data-lucide="x" class="w-3 h-3 pointer-events-none"></i></button>
+                    </div>`).join('');
+                if (window.lucide) window.lucide.createIcons();
+            },
+
+            renderMatrix() {
+                const { guidelines, evaluations, slides } = Store.getState();
+                const container = document.getElementById('evaluationMatrix');
+                if (!container || !guidelines.length) return;
+
+                const opts = slides.length ? slides.map(s => `<option value="${s.index}">Slide ${s.index}</option>`).join('') : `<option value="1">Slide 1</option>`;
+
+                container.innerHTML = guidelines.map((rule, idx) => {
+                    const ev = evaluations[idx];
+                    if (!ev) return '';
+                    const isErr = ev.errors?.length > 0;
+                    const bdr = isErr ? 'border-rose-300 bg-rose-50/20' : 'border-slate-200 bg-white';
+                    
+                    const taxBadge = ev.hasTaxonomy ? 'bg-emerald-100 text-emerald-800' : 'bg-rose-100 text-rose-800 animate-pulse';
+                    const evBadge = ev.hasEvidence ? 'bg-emerald-100 text-emerald-800' : 'bg-rose-100 text-rose-800 animate-pulse';
+                    const sevBadge = ev.severity ? (Utils.severityRank(ev.severity) >= Utils.severityRank(Config.failSeverityThreshold) ? 'bg-rose-500 text-white shadow-sm' : 'bg-amber-100 text-amber-800') : 'bg-slate-100 text-slate-400';
+
+                    return `
+                    <div id="card-rule-${idx}" class="p-4 rounded-xl border shadow-sm space-y-3 ${bdr} transition">
+                        <div class="flex justify-between items-start">
+                            <div class="flex-1 pr-2">
+                                <span class="bg-teal-50 text-teal-800 text-[9px] font-bold px-1.5 py-0.5 rounded border border-teal-200 uppercase shadow-sm">Target ${idx + 1}</span>
+                                <p class="text-xs font-semibold text-slate-800 mt-1.5 leading-relaxed">${Utils.escapeHtml(rule)}</p>
+                            </div>
+                            <div class="flex flex-col space-y-1">
+                                <button data-action="ai-polish" data-idx="${idx}" class="shrink-0 bg-slate-100 text-slate-700 hover:bg-slate-200 text-[9px] font-bold py-1 px-2 rounded flex items-center space-x-1 transition" title="Copilot: Rewrite into strict 3-sentence compliance">
+                                    <i data-lucide="sparkles" class="w-3 h-3 pointer-events-none"></i><span class="pointer-events-none">Polish</span>
+                                </button>
+                                <button data-action="inspect-single" data-idx="${idx}" class="shrink-0 bg-slate-900 text-white text-[9px] font-bold py-1 px-2 rounded flex items-center space-x-1 shadow-sm transition">
+                                    <i data-lucide="scan-search" class="w-3 h-3 pointer-events-none"></i><span class="pointer-events-none">Inspect</span>
+                                </button>
+                            </div>
+                        </div>
+                        <div class="flex items-center space-x-2">
+                            <label class="text-[9px] font-bold uppercase text-slate-500">Slide:</label>
+                            <select data-action="change-slide" data-idx="${idx}" class="text-[10px] p-1 border rounded focus:ring-1 focus:ring-teal-600 bg-white shadow-sm">${opts}</select>
+                            <span class="text-[9px] font-bold px-1.5 py-0.5 rounded uppercase ${sevBadge}">${ev.severity || 'No Sev'}</span>
+                        </div>
+                        <textarea data-action="edit-observation" data-idx="${idx}" rows="3" class="w-full text-[11px] p-2 border rounded focus:ring-1 focus:ring-teal-600 shadow-inner">${Utils.escapeHtml(ev.observation)}</textarea>
+                        <div class="flex flex-wrap gap-1 text-[9px] font-bold">
+                            <span id="chk-sentences-${idx}" class="px-1.5 py-0.5 rounded shadow-sm ${ev.sentenceCount===3?'bg-emerald-100 text-emerald-800':'bg-rose-100 text-rose-800 animate-pulse'}">3 Sentences</span>
+                            <span id="chk-citation-${idx}" class="px-1.5 py-0.5 rounded shadow-sm ${ev.hasCitation?'bg-emerald-100 text-emerald-800':'bg-rose-100 text-rose-800'}">Citation</span>
+                            <span id="chk-taxonomy-${idx}" class="px-1.5 py-0.5 rounded shadow-sm ${taxBadge}">Taxonomy</span>
+                            <span id="chk-evidence-${idx}" class="px-1.5 py-0.5 rounded shadow-sm ${evBadge}">Evidence</span>
+                        </div>
+                        <div id="row-errors-${idx}" class="text-[9px] font-bold text-red-600">${ev.errors?.join(" • ") || ""}</div>
+                    </div>`;
+                }).join('');
+                
+                guidelines.forEach((_, idx) => {
+                    const sel = document.querySelector(`select[data-idx="${idx}"]`);
+                    if (sel && evaluations[idx]) sel.value = evaluations[idx].slideNo;
+                });
+                if (window.lucide) window.lucide.createIcons();
+            },
+
+            updateComplianceOutput() {
+                const { guidelines, evaluations } = Store.getState();
+                const aesEl = document.getElementById('aestheticsText');
+                const wEl = document.getElementById('finalWeightingText');
+                const sEl = document.getElementById('numericScore');
+                
+                const aes = aesEl?.value.trim() || "";
+                const w = wEl?.value.trim() || "";
+                const s = sEl?.value || "4";
+
+                const aesCount = Utils.countSentences(aes);
+                const wCount = Utils.countSentences(w);
+                
+                if(document.getElementById('aestheticsSentences')) document.getElementById('aestheticsSentences').innerText = `${aesCount} sentences`;
+                if(document.getElementById('weightingSentences')) document.getElementById('weightingSentences').innerText = `${wCount} sentences`;
+
+                let anyErrs = (aesCount < 3) || (wCount < 3) || !w.includes(s);
+                let sevFail = 0;
+                let textOut = "";
+
+                guidelines.forEach((rule, idx) => {
+                    const ev = evaluations[idx];
+                    if (ev) {
+                        textOut += `■ ${rule}\n${ev.observation}\n\n`;
+                        if (ev.errors?.length > 0) anyErrs = true;
+                        if (Utils.severityRank(ev.severity) >= Utils.severityRank(Config.failSeverityThreshold)) { anyErrs = true; sevFail++; }
+                    }
+                });
+
+                textOut += `Overall Aesthetics:\n${aes}\n\nFinal Rating & Evaluation Synthesis (Score: ${s}):\n${w}`;
+                const outEl = document.getElementById('compiledOutputBlock');
+                if (outEl) outEl.innerText = textOut;
+
+                const badge = document.getElementById('validationFinalBadge');
+                if (badge) {
+                    if (anyErrs) {
+                        badge.innerText = sevFail > 0 ? `Failing (${sevFail} >= ${Config.failSeverityThreshold})` : "Failing Checks";
+                        badge.className = "bg-rose-100 text-rose-800 text-[9px] font-extrabold px-2 py-0.5 rounded-full uppercase shadow-sm";
+                    } else {
+                        badge.innerText = "Audit Clean";
+                        badge.className = "bg-emerald-100 text-emerald-800 text-[9px] font-extrabold px-2 py-0.5 rounded-full uppercase shadow-sm";
+                    }
+                }
+
+                // Compute Suggested Score
+                const severities = guidelines.map((_, i) => evaluations[i]?.severity).filter(Boolean);
+                let suggested = null;
+                if (severities.length) {
+                    const weights = { critical: 1, major: 2, moderate: 4, minor: 6 };
+                    const avg = severities.reduce((acc, sv) => acc + (weights[sv] || 4), 0) / severities.length;
+                    suggested = Math.max(1, Math.min(7, Math.round(avg)));
+                }
+                const sgBadge = document.getElementById('suggestedScoreBadge');
+                if (sgBadge) {
+                    sgBadge.innerText = suggested ? String(suggested) : "—";
+                    sgBadge.dataset.score = suggested || "";
+                    sgBadge.className = suggested ? "bg-emerald-100 text-emerald-800 text-[10px] font-bold px-1.5 py-0.5 rounded shadow-sm" : "bg-slate-200 text-slate-500 text-[10px] font-bold px-1.5 py-0.5 rounded";
+                }
+            },
+
+            renderBatch() {
+                const { batch } = Store.getState();
+                const container = document.getElementById('batchLedgerItems');
+                if (!container) return;
+                if (!batch.length) { container.innerHTML = ""; return; }
+
+                container.innerHTML = batch.map(b => {
+                    const c = b.score === 7 ? 'bg-emerald-100 text-emerald-900' : b.score === 1 ? 'bg-rose-100 text-rose-900' : 'bg-slate-200 text-slate-800';
+                    return `<div class="flex justify-between items-center text-[10px] p-1.5 border-b border-slate-100 hover:bg-slate-50 transition"><span class="text-slate-400 font-mono">${b.timestamp}</span><span class="${c} font-bold px-1.5 py-0.5 rounded shadow-sm">${b.score}</span><button data-action="remove-batch" data-id="${b.id}" class="text-slate-400 hover:text-red-500"><i data-lucide="x" class="w-3 h-3 pointer-events-none"></i></button></div>`;
+                }).join('');
+                if (window.lucide) window.lucide.createIcons();
+
+                const has1 = batch.some(b => b.score === 1);
+                const has7 = batch.some(b => b.score === 7);
+                const bdg = document.getElementById('batchValidationBadge');
+                if (bdg) {
+                    if (has1 && has7) { bdg.innerText = "Balanced"; bdg.className = "text-[9px] font-bold px-2 py-1 rounded bg-emerald-100 text-emerald-800 shadow-sm"; }
+                    else { bdg.innerText = `Needs ${!has1 ? '1' : ''}${!has1&&!has7?' & ':''}${!has7 ? '7' : ''}`; bdg.className = "text-[9px] font-bold px-2 py-1 rounded bg-amber-100 text-amber-800 shadow-sm"; }
+                }
+            }
+        };
+
+        // ==========================================
+        // 6. STORAGE SERVICES
+        // ==========================================
+        const StorageService = {
+            db: null,
+            auth: null,
+            currentUser: null,
+
+            async init() {
+                const badge = document.getElementById('storageModeBadge');
+                
+                // Fetch injected API key OR look in LocalDB for a custom one
+                let savedKey = await LocalDB.get("AUDIT_CUSTOM_API_KEY");
+                if (Config.apiKey === "" && savedKey) Config.apiKey = savedKey;
+
+                if (!Config.firebaseConfig) {
+                    if (badge) { badge.innerText = "Local Desktop (PWA)"; badge.className = "text-emerald-400 font-bold"; }
+                    await this.loadLocal();
+                    return;
+                }
+
+                try {
+                    const app = initializeApp(Config.firebaseConfig);
+                    this.auth = getAuth(app);
+                    this.db = getFirestore(app);
+
+                    if (Config.initialAuthToken) await signInWithCustomToken(this.auth, Config.initialAuthToken);
+                    else await signInAnonymously(this.auth);
+
+                    onAuthStateChanged(this.auth, (user) => {
+                        this.currentUser = user;
+                        if (user) {
+                            if (badge) { badge.innerText = "Cloud (Auto-Synced)"; badge.className = "text-emerald-400 font-bold"; }
+                            UI.showToast("Connected to Cloud", "Project is automatically saved across sessions.", "success");
+                            this.syncFromCloud();
+                        }
+                    });
+                } catch (err) {
+                    console.error("Firebase init failed:", err);
+                    if (badge) { badge.innerText = "Local Desktop Fallback"; badge.className = "text-emerald-400 font-bold"; }
+                    await this.loadLocal();
+                }
+            },
+
+            async loadLocal() {
+                try {
+                    const raw = await LocalDB.get("AUDIT_rawGuidelinesText") || "";
+                    if (raw) document.getElementById('rawGuidelinesText').value = raw;
+                    
+                    document.getElementById('aestheticsText').value = await LocalDB.get("AUDIT_aestheticsText") || "";
+                    document.getElementById('finalWeightingText').value = await LocalDB.get("AUDIT_finalWeightingText") || "";
+                    document.getElementById('numericScore').value = await LocalDB.get("AUDIT_numericScore") || "4";
+                    
+                    const batch = await LocalDB.get("BATCH_LEDGER") || [];
+                    const guidelineImages = await LocalDB.get("AUDIT_guidelineImages") || [];
+                    const slides = await LocalDB.get("AUDIT_slides") || [];
+                    const evaluations = await LocalDB.get("AUDIT_evaluations") || {};
+
+                    Store.setState({ batch, guidelineImages, slides, evaluations });
+                    if (raw) App.parseGuidelines(true, { silent: true }); 
+                    
+                    UI.updateComplianceOutput();
+                    App.updateDefaultObservationSlideCitations();
+                } catch (err) { console.error("LocalDB load error:", err); }
+            },
+
+            async saveLocal() {
+                try {
+                    const { batch, slides, evaluations, guidelineImages } = Store.getState();
+                    await LocalDB.set("AUDIT_rawGuidelinesText", document.getElementById('rawGuidelinesText').value);
+                    await LocalDB.set("AUDIT_aestheticsText", document.getElementById('aestheticsText').value);
+                    await LocalDB.set("AUDIT_finalWeightingText", document.getElementById('finalWeightingText').value);
+                    await LocalDB.set("AUDIT_numericScore", document.getElementById('numericScore').value);
+                    await LocalDB.set("BATCH_LEDGER", batch);
+                    await LocalDB.set("AUDIT_slides", slides);
+                    await LocalDB.set("AUDIT_evaluations", evaluations);
+                    await LocalDB.set("AUDIT_guidelineImages", guidelineImages);
+                } catch (err) { console.error("LocalDB save error:", err); }
+            },
+
+            async syncFromCloud() {
+                if (!this.currentUser || !this.db) return;
+                const uid = this.currentUser.uid;
+                try {
+                    const [gDoc, sDoc, bDoc] = await Promise.all([
+                        getDoc(doc(this.db, 'artifacts', Config.appId, 'users', uid, 'config', 'guidelines')),
+                        getDoc(doc(this.db, 'artifacts', Config.appId, 'users', uid, 'config', 'synthesis')),
+                        getDoc(doc(this.db, 'artifacts', Config.appId, 'users', uid, 'config', 'batchLedger'))
+                    ]);
+
+                    if (gDoc.exists()) document.getElementById('rawGuidelinesText').value = gDoc.data().text || "";
+                    if (sDoc.exists()) {
+                        document.getElementById('aestheticsText').value = sDoc.data().aesthetics || "";
+                        document.getElementById('finalWeightingText').value = sDoc.data().finalWeighting || "";
+                        document.getElementById('numericScore').value = sDoc.data().numericScore || "4";
+                    }
+                    if (bDoc.exists()) Store.setState({ batch: bDoc.data().batch || [] });
+
+                    onSnapshot(collection(this.db, 'artifacts', Config.appId, 'users', uid, 'guidelineImages'), (snap) => {
+                        const imgs = []; snap.forEach(d => imgs.push({ id: d.id, ...d.data() }));
+                        Store.setState({ guidelineImages: imgs });
+                    });
+
+                    onSnapshot(collection(this.db, 'artifacts', Config.appId, 'users', uid, 'slides'), (snap) => {
+                        const slides = []; snap.forEach(d => slides.push({ id: d.id, ...d.data() }));
+                        slides.sort((a, b) => a.index - b.index);
+                        Store.setState({ slides });
+                        App.updateDefaultObservationSlideCitations();
+                    });
+
+                    const evDoc = await getDoc(doc(this.db, 'artifacts', Config.appId, 'users', uid, 'config', 'evaluations'));
+                    if (evDoc.exists()) {
+                        Store.setState({ evaluations: evDoc.data().evaluations || {} });
+                        App.parseGuidelines(true);
+                    } else {
+                        App.parseGuidelines(false, { silent: true });
+                    }
+                } catch (err) { console.error("Cloud sync failed:", err); }
+            },
+
+            async saveConfig() {
+                if (!this.currentUser || !this.db) return this.saveLocal();
+                const uid = this.currentUser.uid;
+                const { batch, evaluations } = Store.getState();
+                try {
+                    await setDoc(doc(this.db, 'artifacts', Config.appId, 'users', uid, 'config', 'guidelines'), { text: document.getElementById('rawGuidelinesText').value });
+                    await setDoc(doc(this.db, 'artifacts', Config.appId, 'users', uid, 'config', 'synthesis'), { 
+                        aesthetics: document.getElementById('aestheticsText').value, 
+                        finalWeighting: document.getElementById('finalWeightingText').value, 
+                        numericScore: document.getElementById('numericScore').value 
+                    });
+                    await setDoc(doc(this.db, 'artifacts', Config.appId, 'users', uid, 'config', 'batchLedger'), { batch });
+                    await setDoc(doc(this.db, 'artifacts', Config.appId, 'users', uid, 'config', 'evaluations'), { evaluations });
+                } catch (err) { console.error("Cloud save failed:", err); }
+            }
+        };
+
+        // ==========================================
+        // 7. APPLICATION LOGIC
+        // ==========================================
+        const App = {
+            saveTimeout: null,
+
+            async init() {
+                Store.subscribe(() => {
+                    UI.renderSlides();
+                    UI.renderOcrQueue();
+                    UI.renderBatch();
+                });
+                
+                this.bindEvents();
+                await StorageService.init(); 
+            },
+
+            async saveState() {
+                await StorageService.saveConfig();
+            },
+
+            triggerAutoSave() {
+                if (Store.getState().suppressAutoSave) return;
+                if (this.saveTimeout) clearTimeout(this.saveTimeout);
+                this.saveTimeout = setTimeout(() => this.saveState(), 1000);
+            },
+
+            bindEvents() {
+                // PWA Install Prompt Logic
+                const btnInstall = document.getElementById('installPwaBtn');
+                if(btnInstall) {
+                    btnInstall.addEventListener('click', async () => {
+                        if (deferredPrompt) {
+                            deferredPrompt.prompt();
+                            const { outcome } = await deferredPrompt.userChoice;
+                            if (outcome === 'accepted') btnInstall.classList.add('hidden');
+                            deferredPrompt = null;
+                        }
+                    });
+                }
+
+                document.body.addEventListener('click', async (e) => {
+                    const btn = e.target.closest('[data-action]');
+                    if (!btn) return;
+                    const act = btn.dataset.action;
+
+                    if (act === 'switch-tab') {
+                        UI.switchTab(btn.dataset.group, btn.dataset.target);
+                    } else if (act === 'open-config') {
+                        document.getElementById('customApiKeyInput').value = await LocalDB.get("AUDIT_CUSTOM_API_KEY") || "";
+                        UI.toggleModal('apiConfigModal', 'open');
+                    } else if (act === 'close-config') {
+                        UI.toggleModal('apiConfigModal');
+                    } else if (act === 'save-config') {
+                        const key = document.getElementById('customApiKeyInput').value.trim();
+                        Config.apiKey = key;
+                        await LocalDB.set("AUDIT_CUSTOM_API_KEY", key);
+                        UI.toggleModal('apiConfigModal');
+                        UI.showToast("Saved", "API Key updated successfully.", "success");
+                    } else if (act === 'close-modal') {
+                        UI.toggleModal('zoomModal');
+                    } else if (act === 'zoom-image') {
+                        UI.zoomImage(e.target.src, e.target.dataset.title || "Preview");
+                    } else if (act === 'clear-guidelines') {
+                        document.getElementById('rawGuidelinesText').value = "";
+                        Store.setState({ guidelines: [], guidelineImages: [], evaluations: {} });
+                        UI.renderMatrix();
+                        this.saveState();
+                        UI.showToast("Cleared", "Guidelines erased.", "info");
+                    } else if (act === 'clear-slides') {
+                        Store.setState({ slides: [] });
+                        this.saveState();
+                        UI.showToast("Cleared", "Slides erased.", "info");
+                    } else if (act === 'remove-slide') {
+                        const id = btn.dataset.id;
+                        let { slides } = Store.getState();
+                        slides = slides.filter(s => s.id !== id);
+                        slides.forEach((s, i) => { s.index = i + 1; s.name = `Slide ${i+1}`; }); 
+                        Store.setState({ slides });
+                        this.syncAllCitations();
+                        this.saveState();
+                    } else if (act === 'shift-slide') {
+                        const dir = parseInt(btn.dataset.direction);
+                        const id = btn.dataset.slideId;
+                        let { slides } = Store.getState();
+                        const i = slides.findIndex(s => s.id === id);
+                        if (i === -1 || i + dir < 0 || i + dir >= slides.length) return;
+                        const t = slides[i]; slides[i] = slides[i+dir]; slides[i+dir] = t;
+                        slides.forEach((s, j) => { s.index = j + 1; s.name = `Slide ${j+1}`; });
+                        Store.setState({ slides });
+                        this.syncAllCitations();
+                        this.saveState();
+                    } else if (act === 'remove-ocr') {
+                        let { guidelineImages } = Store.getState();
+                        Store.setState({ guidelineImages: guidelineImages.filter(g => g.id !== btn.dataset.id) });
+                        this.saveState();
+                    } else if (act === 'generate-ledger') {
+                        this.parseGuidelines(false);
+                    } else if (act === 'run-ocr') {
+                        this.runOcrQueue();
+                    } else if (act === 'synthesize-guidelines') {
+                        this.synthesizeGuidelines();
+                    } else if (act === 'inspect-single') {
+                        this.inspectTarget(parseInt(btn.dataset.idx));
+                    } else if (act === 'ai-polish') {
+                        this.aiPolishObservation(parseInt(btn.dataset.idx));
+                    } else if (act === 'run-autonomous-audit') {
+                        this.runAutonomousAudit();
+                    } else if (act === 'draft-recommendation') {
+                        this.draftRecommendation();
+                    } else if (act === 'apply-suggested-score') {
+                        const bdg = document.getElementById('suggestedScoreBadge');
+                        if (bdg && bdg.dataset.score) {
+                            document.getElementById('numericScore').value = bdg.dataset.score;
+                            UI.updateComplianceOutput();
+                            this.saveState();
+                        }
+                    } else if (act === 'copy-rationale') {
+                        this.copyToClipboard();
+                    } else if (act === 'reset-presentation') {
+                        this.resetPresentation();
+                    } else if (act === 'add-to-batch') {
+                        const s = parseInt(document.getElementById('numericScore').value || 4);
+                        const { batch } = Store.getState();
+                        batch.push({ id: Date.now().toString(), score: s, timestamp: new Date().toLocaleTimeString() });
+                        Store.setState({ batch });
+                        this.saveState();
+                        UI.showToast("Logged", "Score saved to batch history.", "success");
+                    } else if (act === 'remove-batch') {
+                        let { batch } = Store.getState();
+                        Store.setState({ batch: batch.filter(b => b.id !== btn.dataset.id) });
+                        this.saveState();
+                    } else if (act === 'clear-batch') {
+                        Store.setState({ batch: [] });
+                        this.saveState();
+                    }
+                });
+
+                document.body.addEventListener('change', async (e) => {
+                    const tar = e.target;
+                    if (tar.dataset.changeAction === 'upload-slides') {
+                        this.processSlidesUpload(tar.files);
+                        tar.value = '';
+                    } else if (tar.dataset.changeAction === 'upload-ocr-images') {
+                        const files = Array.from(tar.files);
+                        const imgs = [...Store.getState().guidelineImages];
+                        for (let f of files) {
+                            const b64 = await Utils.readAndCompressFile(f);
+                            imgs.push({ id: Date.now().toString()+Math.random(), name: f.name, base64: b64, parsed: false });
+                        }
+                        Store.setState({ guidelineImages: imgs });
+                        this.saveState();
+                        tar.value = '';
+                    } else if (tar.dataset.changeAction === 'upload-doc') {
+                        if (!tar.files[0]) return;
+                        const text = await new Promise(r => { const rd = new FileReader(); rd.onload=()=>r(rd.result); rd.readAsText(tar.files[0]); });
+                        document.getElementById('rawGuidelinesText').value = text;
+                        this.parseGuidelines(false);
+                        tar.value = '';
+                    } else if (tar.dataset.action === 'change-slide') {
+                        this.updateEvaluationSlide(parseInt(tar.dataset.idx), tar.value);
+                    }
+                });
+
+                document.body.addEventListener('input', (e) => {
+                    const tar = e.target;
+                    if (tar.dataset.inputAction === 'auto-save' || tar.dataset.inputAction === 'update-compliance') {
+                        UI.updateComplianceOutput();
+                        this.triggerAutoSave();
+                    } else if (tar.dataset.action === 'edit-observation') {
+                        this.validateObservation(parseInt(tar.dataset.idx), tar.value);
+                    }
+                });
+            },
+
+            async processSlidesUpload(fileList) {
+                const files = Array.from(fileList);
+                if (!files.length) return;
+                
+                const spinner = document.getElementById('slideLoadProgressSpinner');
+                const st = document.getElementById('slideLoadProgressText');
+                if (spinner) spinner.classList.remove('hidden');
+
+                const slides = [...Store.getState().slides];
+                for (let i = 0; i < files.length; i++) {
+                    if (st) st.innerText = `Ingesting ${i+1}/${files.length}...`;
+                    const b64 = await Utils.readAndCompressFile(files[i], 1280, 720, 0.5);
+                    slides.push({ id: Date.now().toString()+i, name: `Slide ${slides.length+1}`, index: slides.length+1, base64: b64 });
+                    
+                    // Force a yield to main thread to prevent UI freezing on huge deck uploads
+                    await new Promise(r => setTimeout(r, 10));
+                }
+                Store.setState({ slides });
+                this.syncAllCitations();
+                await this.saveState();
+                
+                if (spinner) spinner.classList.add('hidden');
+                UI.showToast("Ready", "Slides loaded. Run Auto-Audit when ready.", "success");
+            },
+
+            parseGuidelines(preserve = false, options = {}) {
+                const { silent = false } = options;
+                const raw = document.getElementById('rawGuidelinesText').value;
+                if (!raw.trim()) return;
+                
+                const lines = raw.split('\n');
+                const guidelines = [];
+                lines.forEach(l => {
+                    const cl = Utils.parseGuideline(l);
+                    if (cl && !cl.startsWith("//")) guidelines.push(cl);
+                });
+                
+                document.getElementById('rawGuidelinesText').value = guidelines.map(g => `• ${g}`).join('\n');
+                Store.setState({ guidelines });
+
+                const { slides, evaluations } = Store.getState();
+                const newEv = preserve ? { ...evaluations } : {};
+                
+                guidelines.forEach((g, i) => {
+                    if (!preserve || !newEv[i]) {
+                        const sNo = slides.length ? (i % slides.length) + 1 : 1;
+                        newEv[i] = {
+                            rule: g, slideNo: sNo.toString(),
+                            observation: `On Slide ${sNo}, the deck follows this instruction because...`,
+                            sentenceCount: 0, errors: [], severity: null, hasCitation: false, hasTaxonomy: false, hasEvidence: false
+                        };
+                    } else {
+                        newEv[i].rule = g;
+                    }
+                });
+
+                Store.setState({ evaluations: newEv });
+                UI.renderMatrix();
+                guidelines.forEach((_, i) => this.validateObservation(i, newEv[i].observation));
+                this.triggerAutoSave();
+                if (!silent) UI.showToast("Matrix Assembled", `Constructed ${guidelines.length} structured inspection targets.`, "success");
+            },
+
+            updateDefaultObservationSlideCitations() {
+                const { guidelines, slides, evaluations } = Store.getState();
+                if (!guidelines.length || !slides.length) return;
+                
+                guidelines.forEach((_, idx) => {
+                    const ev = evaluations[idx];
+                    if (!ev) return;
+                    const assignedSlideNo = (idx % slides.length) + 1;
+                    ev.slideNo = assignedSlideNo.toString();
+                    
+                    const selector = document.querySelector(`select[data-idx="${idx}"]`);
+                    if (selector) selector.value = assignedSlideNo.toString();
+                    
+                    const defaultTextPattern = /^On Slide \d+, the deck (follows|weakens|omits|substitutes|contradicts) this instruction because the background is a flat, clean white/;
+                    if (defaultTextPattern.test(ev.observation) || ev.observation.includes("On Slide 1, the deck follows")) {
+                        ev.observation = `On Slide ${assignedSlideNo}, the deck follows this instruction because the background is a flat, clean white. This choice provides high visual contrast against near-black dark teal primary body copy. The resulting workspace layout maintains pristine legibility for data-first information.`;
+                        const textarea = document.querySelector(`textarea[data-idx="${idx}"]`);
+                        if (textarea) textarea.value = ev.observation;
+                    }
+                    
+                    this.validateObservation(idx, ev.observation);
+                });
+                UI.updateComplianceOutput();
+            },
+
+            syncAllCitations() {
+                const { guidelines, slides, evaluations } = Store.getState();
+                if (!guidelines.length || !slides.length) return;
+                
+                guidelines.forEach((_, i) => {
+                    const ev = evaluations[i];
+                    if (!ev) return;
+                    const assigned = (i % slides.length) + 1;
+                    ev.slideNo = assigned.toString();
+                    if (/^On Slide \d+, the deck/.test(ev.observation)) {
+                        ev.observation = ev.observation.replace(/^On Slide \d+/, `On Slide ${assigned}`);
+                        const ta = document.querySelector(`textarea[data-idx="${i}"]`);
+                        if (ta) ta.value = ev.observation;
+                    }
+                    this.validateObservation(i, ev.observation);
+                });
+            },
+
+            updateEvaluationSlide(idx, slideNo) {
+                const ev = Store.getState().evaluations[idx];
+                if (!ev) return;
+                ev.slideNo = slideNo;
+                let text = ev.observation;
+                if (/^(On Slide \d+|Slide \d+)/.test(text)) {
+                    text = text.replace(/^(On Slide \d+|Slide \d+)/, `On Slide ${slideNo}`);
+                }
+                const ta = document.querySelector(`textarea[data-idx="${idx}"]`);
+                if (ta) ta.value = text;
+                this.validateObservation(idx, text);
+            },
+
+            validateObservation(idx, text) {
+                const { evaluations } = Store.getState();
+                const ev = evaluations[idx];
+                if (!ev) return;
+                ev.observation = text;
+                
+                const errs = [];
+                ev.sentenceCount = Utils.countSentences(text);
+                if (ev.sentenceCount !== 3) errs.push("Must be exactly 3 sentences.");
+                
+                ev.hasCitation = new RegExp(`\\b(Slide|Page)\\s*${ev.slideNo}\\b`, 'i').test(text);
+                if (!ev.hasCitation) errs.push(`Must cite Slide ${ev.slideNo}.`);
+
+                const tax = /\b(follows|weakens|omits|substitutes|contradicts)\b/i;
+                ev.hasTaxonomy = tax.test(text);
+                if (!ev.hasTaxonomy) errs.push("Missing taxonomy word.");
+
+                ev.hasEvidence = Utils.hasEvidenceMarkers(text);
+                
+                if (/(looks professional|visually appealing|beautiful)/i.test(text)) errs.push("Remove banned jargon.");
+
+                ev.errors = errs;
+                Store.updateEvaluation(idx, ev);
+                
+                // Fast DOM update
+                const errDiv = document.getElementById(`row-errors-${idx}`);
+                if (errDiv) errDiv.innerText = errs.join(" • ");
+                const card = document.getElementById(`card-rule-${idx}`);
+                if (card) card.className = errs.length ? 'p-4 rounded-xl border border-rose-300 bg-rose-50/20 shadow-sm space-y-3 transition' : 'p-4 rounded-xl border border-slate-200 bg-white shadow-sm space-y-3 transition';
+                
+                // Update badges fast
+                const bdgS = document.getElementById(`chk-sentences-${idx}`);
+                if(bdgS) bdgS.className = ev.sentenceCount===3?'px-1.5 py-0.5 rounded shadow-sm bg-emerald-100 text-emerald-800':'px-1.5 py-0.5 rounded shadow-sm bg-rose-100 text-rose-800 animate-pulse';
+                const bdgC = document.getElementById(`chk-citation-${idx}`);
+                if(bdgC) bdgC.className = ev.hasCitation?'px-1.5 py-0.5 rounded shadow-sm bg-emerald-100 text-emerald-800':'px-1.5 py-0.5 rounded shadow-sm bg-rose-100 text-rose-800 animate-pulse';
+                const bdgT = document.getElementById(`chk-taxonomy-${idx}`);
+                if(bdgT) bdgT.className = ev.hasTaxonomy?'px-1.5 py-0.5 rounded shadow-sm bg-emerald-100 text-emerald-800':'px-1.5 py-0.5 rounded shadow-sm bg-rose-100 text-rose-800 animate-pulse';
+                
+                UI.updateComplianceOutput();
+                this.triggerAutoSave();
+            },
+
+            // ==========================================
+            // LLM ORCHESTRATION FEATURES
+            // ==========================================
+            async runOcrQueue() {
+                const { guidelineImages } = Store.getState();
+                if (!guidelineImages.length) return;
+                
+                const spinner = document.getElementById('ocrSpinner');
+                if (spinner) spinner.classList.remove('hidden');
+                
+                let rules = [];
+                for (let i=0; i<guidelineImages.length; i++) {
+                    const img = guidelineImages[i];
+                    if (img.parsed) continue;
+                    
+                    try {
+                        const payload = {
+                            contents: [{
+                                role: "user",
+                                parts: [
+                                    { text: "Extract design style requirements, constraints, and explicit guidelines from this image. Output ONLY clean bullet points. No intro." },
+                                    { inlineData: { mimeType: "image/jpeg", data: img.base64.split(',')[1] } }
+                                ]
+                            }]
+                        };
+                        const res = await Gemini.call(payload);
+                        const txt = res.candidates?.[0]?.content?.parts?.[0]?.text;
+                        if (txt) {
+                            rules.push(`// --- ${img.name.toUpperCase()} ---\n${txt.trim()}`);
+                            img.parsed = true;
+                        }
+                    } catch(e) { console.error("OCR Error", e); }
+                }
+
+                if (rules.length) {
+                    const raw = document.getElementById('rawGuidelinesText');
+                    if (raw) raw.value = (raw.value + '\n\n' + rules.join('\n\n')).trim();
+                    UI.showToast("OCR Complete", "Guidelines extracted.", "success");
+                    this.parseGuidelines(true);
+                    UI.switchTab('guide', 'paste');
+                }
+                Store.setState({ guidelineImages });
+                if (spinner) spinner.classList.add('hidden');
+                this.saveState();
+            },
+
+            async synthesizeGuidelines() {
+                const { guidelines } = Store.getState();
+                if (!guidelines.length) return UI.showToast("Empty", "No rules to synthesize.", "warning");
+                UI.showToast("Synthesizing", "LLM is cleaning guidelines...", "info");
+                try {
+                    const res = await Gemini.call({
+                        contents: [{ role: "user", parts: [{ text: `Act as a design auditor. Deduplicate, combine, and clean this list of rules into unique actionable bullet points. Keep it strict.\n\nRULES:\n${guidelines.join('\n')}` }] }]
+                    });
+                    const txt = res.candidates?.[0]?.content?.parts?.[0]?.text;
+                    if (txt) {
+                        document.getElementById('rawGuidelinesText').value = txt;
+                        this.parseGuidelines(false);
+                        UI.showToast("Cleaned", "Guidelines deduped.", "success");
+                    }
+                } catch(e) { UI.showToast("Error", e.message, "error"); }
+            },
+
+            async aiPolishObservation(idx) {
+                const { evaluations } = Store.getState();
+                const ev = evaluations[idx];
+                if (!ev || !ev.observation) return;
+
+                const card = document.getElementById(`card-rule-${idx}`);
+                if (card) card.classList.add('pulse-border');
+                UI.showToast("Polishing...", "Rewriting to strict 3-sentence rules...", "info");
+
+                try {
+                    const prompt = `Rewrite this design audit observation to perfectly follow a strict 3-sentence rule. Do not lose the core intent or visual evidence.
+1. Sentence 1: Start with "On Slide ${ev.slideNo}, the deck [follows/weakens/omits/substitutes/contradicts] this instruction because...". Ensure the taxonomy word matches the original intent.
+2. Sentence 2: Provide the concrete visual evidence (px, colors, alignment).
+3. Sentence 3: Describe the impact on hierarchy or legibility.
+
+Current Draft: "${ev.observation}"`;
+
+                    const payload = { contents: [{ role: "user", parts: [{ text: prompt }] }] };
+                    const res = await Gemini.call(payload);
+                    const txt = res.candidates?.[0]?.content?.parts?.[0]?.text;
+                    
+                    if (txt) {
+                        const cleanTxt = txt.replace(/\n/g, ' ').trim();
+                        const ta = document.querySelector(`textarea[data-idx="${idx}"]`);
+                        if (ta) ta.value = cleanTxt;
+                        this.validateObservation(idx, cleanTxt);
+                        UI.showToast("Polished", "Observation successfully rewritten.", "success");
+                    }
+                } catch(e) { UI.showToast("Error", "Polish failed.", "error"); }
+                finally { if (card) card.classList.remove('pulse-border'); }
+            },
+
+            async inspectTarget(idx, silent = false) {
+                const { evaluations, slides } = Store.getState();
+                const ev = evaluations[idx];
+                const slide = slides.find(s => s.index.toString() === ev.slideNo);
+                if (!slide) return UI.showToast("Missing Slide", `Upload Slide ${ev.slideNo} first.`, "warning");
+
+                const card = document.getElementById(`card-rule-${idx}`);
+                if (card) card.classList.add('pulse-border');
+
+                try {
+                    const prompt = `Inspect this presentation slide against this explicit instruction: "${ev.rule}".
+Return a JSON object.
+"observation": Write exactly 3 sentences. Sentence 1: explicitly state if the slide "follows", "weakens", "omits", "substitutes", or "contradicts" the rule, starting with "On Slide ${ev.slideNo}, the deck [word] this instruction because...". Sentence 2: Highly specific visual evidence (colors, px, alignment). Sentence 3: Impact on hierarchy/legibility. DO NOT use words like "visually appealing" or "looks professional".
+"severity": based on the evidence, classify deviation as "minor", "moderate", "major", or "critical" (or "minor" if it perfectly follows).`;
+
+                    const payload = {
+                        contents: [{ role: "user", parts: [{ text: prompt }, { inlineData: { mimeType: "image/jpeg", data: slide.base64.split(',')[1] } }] }],
+                        generationConfig: {
+                            responseMimeType: "application/json",
+                            responseSchema: {
+                                type: "OBJECT",
+                                properties: { observation: { type: "STRING" }, severity: { type: "STRING" } },
+                                required: ["observation", "severity"]
+                            }
+                        }
+                    };
+
+                    const res = await Gemini.call(payload);
+                    const json = JSON.parse(res.candidates[0].content.parts[0].text);
+
+                    if (json.observation) {
+                        const ta = document.querySelector(`textarea[data-idx="${idx}"]`);
+                        if (ta) ta.value = json.observation;
+                        ev.severity = json.severity;
+                        Store.updateEvaluation(idx, ev);
+                        this.validateObservation(idx, json.observation);
+                    }
+                } catch(e) { if(!silent) UI.showToast("Audit Failed", e.message, "error"); }
+                finally { if (card) card.classList.remove('pulse-border'); }
+            },
+
+            async runAutonomousAudit() {
+                const { guidelines, slides } = Store.getState();
+                if (!guidelines.length || !slides.length) return UI.showToast("Cannot Start", "Need guidelines and slides.", "warning");
+                
+                const overlay = document.getElementById('autonomousProgressOverlay');
+                const bar = document.getElementById('autonomousProgressBar');
+                const txt = document.getElementById('autonomousStatusText');
+                if (overlay) overlay.classList.remove('hidden');
+
+                try {
+                    Store.setState({ suppressAutoSave: true });
+                    
+                    // MULTI-THREADED CONCURRENCY POOL (Processes 3 rules at a time)
+                    const concurrency = 3;
+                    for (let i = 0; i < guidelines.length; i += concurrency) {
+                        const chunk = guidelines.slice(i, i + concurrency).map((_, idx) => {
+                            const globalIdx = i + idx;
+                            if (bar) bar.style.width = `${Math.round((globalIdx/guidelines.length)*100)}%`;
+                            if (txt) txt.innerText = `Inspecting Target ${globalIdx+1} against Slide ${Store.getState().evaluations[globalIdx]?.slideNo}...`;
+                            return this.inspectTarget(globalIdx, true);
+                        });
+                        await Promise.all(chunk);
+                    }
+                    
+                    if (bar) bar.style.width = `100%`;
+                    if (txt) txt.innerText = `Drafting final recommendation...`;
+                    await this.draftRecommendation(true);
+                    UI.showToast("Audit Complete", "All rules successfully checked.", "success");
+                } finally {
+                    Store.setState({ suppressAutoSave: false });
+                    if (overlay) overlay.classList.add('hidden');
+                    this.saveState();
+                }
+            },
+
+            async draftRecommendation(silent = false) {
+                const { guidelines, evaluations } = Store.getState();
+                let summary = "";
+                guidelines.forEach((g, i) => { if(evaluations[i]) summary += `Rule: ${g}\nSeverity: ${evaluations[i].severity}\nObs: ${evaluations[i].observation}\n\n`; });
+
+                if (!silent) UI.showToast("Drafting", "Analyzing ledger...", "info");
+                try {
+                    const payload = {
+                        contents: [{ role: "user", parts: [{ text: `Review this ledger:\n${summary}\nDraft JSON with:\n"aesthetics": 4 sentences on overall style cohesion. No banned words.\n"weighing": 4 sentences justifying the score based on severities.\n"score": logical integer 1-7 based on severities.` }] }],
+                        generationConfig: { responseMimeType: "application/json", responseSchema: { type: "OBJECT", properties: { aesthetics: { type: "STRING" }, weighing: { type: "STRING" }, score: { type: "INTEGER" } } } }
+                    };
+                    const res = await Gemini.call(payload);
+                    const j = JSON.parse(res.candidates[0].content.parts[0].text);
+                    
+                    document.getElementById('aestheticsText').value = j.aesthetics || "";
+                    document.getElementById('finalWeightingText').value = j.weighing || "";
+                    document.getElementById('numericScore').value = Math.min(7, Math.max(1, j.score || 4)).toString();
+                    
+                    UI.updateComplianceOutput();
+                    this.triggerAutoSave();
+                } catch(e) { if (!silent) UI.showToast("Error", "Draft failed.", "error"); }
+            },
+
+            async copyToClipboard() {
+                const txt = document.getElementById('compiledOutputBlock')?.innerText || "";
+                try {
+                    await navigator.clipboard.writeText(txt);
+                    UI.showToast("Copied", "Rationale secured.", "success");
+                } catch(e) {
+                    const ta = document.createElement('textarea'); ta.value = txt; document.body.appendChild(ta); ta.select(); document.execCommand('copy'); ta.remove();
+                    UI.showToast("Copied", "Fallback clipboard used.", "success");
+                }
+            },
+
+            resetPresentation() {
+                document.getElementById('aestheticsText').value = "";
+                document.getElementById('finalWeightingText').value = "";
+                document.getElementById('numericScore').value = "4";
+                Store.setState({ slides: [], evaluations: {} });
+                
+                const { guidelines } = Store.getState();
+                const ev = {};
+                guidelines.forEach((g, i) => { ev[i] = { rule: g, slideNo: "1", observation: "", sentenceCount: 0, errors: [] }; });
+                Store.setState({ evaluations: ev });
+                
+                UI.renderMatrix();
+                UI.updateComplianceOutput();
+                this.saveState();
+                UI.showToast("Reset", "Ready for next presentation.", "info");
+            }
+        };
+
+        document.addEventListener('DOMContentLoaded', () => App.init());
+        window.App = App;
+    </script>
+</body>
+</html>
